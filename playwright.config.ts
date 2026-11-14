@@ -1,8 +1,17 @@
-import { loadEnvConfig } from "@next/env";
+import { existsSync, readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
+
 import { defineConfig, devices } from "@playwright/test";
 
-// Load .env.local so test helpers can create throwaway users on the dev project.
-loadEnvConfig(process.cwd(), true);
+// Load .env.local so test helpers can create throwaway users on the dev
+// project. Read directly: @next/env skips .env.local when NODE_ENV is "test".
+if (existsSync(".env.local")) {
+  for (const [key, value] of Object.entries(
+    parseEnv(readFileSync(".env.local", "utf8")),
+  )) {
+    if (value && process.env[key] === undefined) process.env[key] = value;
+  }
+}
 
 const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;

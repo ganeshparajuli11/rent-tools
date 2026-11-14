@@ -41,20 +41,20 @@ test.describe("homes (phone)", () => {
     await page.getByLabel("Address line 1").fill("12 Oak Road");
     await page.getByLabel("Town or city (optional)").fill("Leeds");
     await page.getByLabel("Postcode").fill("ls61aa");
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 2: by the room, 3 rooms
     await expect(page.getByText("Step 2 of 3")).toBeVisible();
     await page.getByRole("radio", { name: /By the room/ }).check();
     await page.getByLabel("How many rooms do you let?").fill("3");
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Back keeps the answers
-    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
     await expect(page.getByLabel("How many rooms do you let?")).toHaveValue(
       "3",
     );
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 3: owner lease
     await expect(page.getByText("Step 3 of 3")).toBeVisible();
@@ -103,7 +103,7 @@ test.describe("homes (phone)", () => {
     await expect(page.getByRole("link", { name: /12 Oak Road/ })).toHaveCount(
       0,
     );
-    await page.getByRole("button", { name: "Undo" }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(page.getByRole("link", { name: /12 Oak Road/ })).toBeVisible();
   });
 });

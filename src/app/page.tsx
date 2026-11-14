@@ -14,10 +14,10 @@ export default function HomePage() {
       {/* A real link styled as a shadcn Button, so screen readers announce it
           as a link (it navigates) rather than a button. */}
       <Link
-        href="/login"
+        href="/sign-in"
         className={cn(buttonVariants({ size: "lg" }), "h-12 w-full text-base")}
       >
-        Log in
+        Sign in
       </Link>
     </main>
   );

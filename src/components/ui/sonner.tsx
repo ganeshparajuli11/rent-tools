@@ -35,6 +35,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
+          // Undo must be easy to hit on a phone (44px minimum).
+          actionButton: "!h-11 !px-4 !text-base !font-semibold",
         },
       }}
       {...props}

@@ -1,0 +1,26 @@
+<h2>Your RentDesk sign-in code</h2>
+
+<p>Your code is:</p>
+<p style="font-size: 32px; font-weight: bold; letter-spacing: 6px">
+  {{ .Token }}
+</p>
+<p>Type this code into RentDesk to sign in. It works for 1 hour.</p>
+
+<p>Or tap this button to sign in on this device:</p>
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+    style="
+      display: inline-block;
+      padding: 14px 24px;
+      background: #171717;
+      color: #ffffff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 18px;
+    "
+    >Sign in to RentDesk</a
+  >
+</p>
+
+<p>If you did not ask to sign in, you can ignore this email.</p>

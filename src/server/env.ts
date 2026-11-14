@@ -12,7 +12,14 @@ import {
  * Upstash). This is the only place that reads them. The "server-only" import
  * makes the build fail if a Client Component ever imports this file.
  */
-function parseServerEnv(): ServerEnv {
+let cachedServerEnv: ServerEnv | undefined;
+
+/**
+ * Validated on first call, not on import, so `next build` doesn't need
+ * production-only secrets just because a page imports a server action.
+ */
+export function getServerEnv(): ServerEnv {
+  if (cachedServerEnv) return cachedServerEnv;
   const raw = {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,
@@ -21,7 +28,8 @@ function parseServerEnv(): ServerEnv {
   };
 
   if (isEnvValidationSkipped) {
-    return raw as ServerEnv;
+    cachedServerEnv = raw as ServerEnv;
+    return cachedServerEnv;
   }
 
   const result = serverEnvSchema.safeParse(raw);
@@ -30,7 +38,6 @@ function parseServerEnv(): ServerEnv {
       `Invalid server environment variables:\n${formatEnvError(result.error)}`,
     );
   }
-  return result.data;
+  cachedServerEnv = result.data;
+  return cachedServerEnv;
 }
-
-export const serverEnv = parseServerEnv();

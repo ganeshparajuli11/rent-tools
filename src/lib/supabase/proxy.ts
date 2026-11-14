@@ -1,16 +1,35 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import type { Database } from "@/lib/supabase/database.types";
 import { getPublicEnv, hasSupabaseEnv } from "@/lib/env";
 
 /** Paths anyone can open without logging in. Everything else needs a session. */
-const PUBLIC_PATHS = ["/", "/login", "/sign-up", "/auth"];
+const PUBLIC_PATHS = ["/", "/sign-in", "/auth"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(
     (path) =>
       pathname === path || (path !== "/" && pathname.startsWith(`${path}/`)),
   );
+}
+
+/** Redirect, carrying over any refreshed or cleared auth cookies and headers. */
+function redirectKeepingCookies(
+  request: NextRequest,
+  supabaseResponse: NextResponse,
+  pathname: string,
+) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  const redirect = NextResponse.redirect(url);
+  supabaseResponse.cookies
+    .getAll()
+    .forEach((cookie) => redirect.cookies.set(cookie));
+  const cacheControl = supabaseResponse.headers.get("cache-control");
+  if (cacheControl) redirect.headers.set("cache-control", cacheControl);
+  return redirect;
 }
 
 /**
@@ -32,7 +51,7 @@ export async function updateSession(request: NextRequest) {
   const env = getPublicEnv();
 
   // Create a new client on every request. Don't store it globally.
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
@@ -63,16 +82,16 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (!user && !isPublicPath(request.nextUrl.pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.search = "";
-    const redirect = NextResponse.redirect(url);
-    // Keep any refreshed/cleared auth cookies on the redirect response.
-    supabaseResponse.cookies
-      .getAll()
-      .forEach((cookie) => redirect.cookies.set(cookie));
-    return redirect;
+  const { pathname } = request.nextUrl;
+
+  // Signed out and not on a public page: go to sign in.
+  if (!user && !isPublicPath(pathname)) {
+    return redirectKeepingCookies(request, supabaseResponse, "/sign-in");
+  }
+
+  // Already signed in but on the sign-in screens: go to the dashboard.
+  if (user && (pathname === "/sign-in" || pathname.startsWith("/sign-in/"))) {
+    return redirectKeepingCookies(request, supabaseResponse, "/dashboard");
   }
 
   // IMPORTANT: return supabaseResponse as-is. If you need a different

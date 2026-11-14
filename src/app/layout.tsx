@@ -37,7 +37,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col">
         {children}
-        <Toaster />
+        {/* Top of the screen so toasts never cover the phone bottom bar. */}
+        <Toaster position="top-center" />
       </body>
     </html>
   );

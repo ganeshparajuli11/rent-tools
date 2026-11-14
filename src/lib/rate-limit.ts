@@ -3,7 +3,7 @@ import "server-only";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-import { serverEnv } from "@/server/env";
+import { getServerEnv } from "@/server/env";
 
 /**
  * Reusable rate limiter backed by Upstash Redis.
@@ -29,18 +29,27 @@ export type RateLimitResult = {
   skipped: boolean;
 };
 
-const redis =
-  serverEnv.UPSTASH_REDIS_REST_URL && serverEnv.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: serverEnv.UPSTASH_REDIS_REST_URL,
-        token: serverEnv.UPSTASH_REDIS_REST_TOKEN,
-      })
-    : null;
+let redis: Redis | null | undefined;
+
+function getRedis(): Redis | null {
+  if (redis === undefined) {
+    const env = getServerEnv();
+    redis =
+      env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
+        ? new Redis({
+            url: env.UPSTASH_REDIS_REST_URL,
+            token: env.UPSTASH_REDIS_REST_TOKEN,
+          })
+        : null;
+  }
+  return redis;
+}
 
 const limiters = new Map<string, Ratelimit>();
 let warnedMissing = false;
 
 function getLimiter(name: string, requests: number, window: Duration) {
+  const redis = getRedis();
   if (!redis) return null;
   const key = `${name}:${requests}:${window}`;
   let limiter = limiters.get(key);

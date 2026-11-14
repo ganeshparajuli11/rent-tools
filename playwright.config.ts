@@ -1,4 +1,8 @@
+import { loadEnvConfig } from "@next/env";
 import { defineConfig, devices } from "@playwright/test";
+
+// Load .env.local so test helpers can create throwaway users on the dev project.
+loadEnvConfig(process.cwd(), true);
 
 const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
@@ -16,7 +20,12 @@ export default defineConfig({
   // Mobile first: test a phone and a desktop browser.
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"] } },
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "desktop",
+      use: { ...devices["Desktop Chrome"] },
+      // The homes journey is specified for the phone viewport.
+      testIgnore: /homes\.spec\.ts/,
+    },
   ],
   // Start the dev server unless PLAYWRIGHT_BASE_URL points somewhere else.
   webServer: process.env.PLAYWRIGHT_BASE_URL

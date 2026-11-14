@@ -13,7 +13,10 @@
     "typecheck": "SKIP_ENV_VALIDATION=1 next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:rls": "vitest run --config vitest.rls.config.mts",
+    "db:types": "supabase gen types --lang=typescript --remote --schema public > src/lib/supabase/database.types.ts && prettier --write src/lib/supabase/database.types.ts",
+    "db:push": "supabase db push --remote"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -41,6 +44,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@next/env": "16.4.6",
     "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "4.3.3",
     "@testing-library/dom": "^10.4.2",
@@ -57,6 +61,7 @@
     "jsdom": "^31.0.0",
     "prettier": "^3.10.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "supabase": "^3.1.0",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vitest": "^5.1.0"

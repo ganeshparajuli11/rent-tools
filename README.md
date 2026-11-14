@@ -69,30 +69,36 @@ How they are checked:
 
 ## Scripts
 
-| Command                             | What it does                                           |
-| ----------------------------------- | ------------------------------------------------------ |
-| `pnpm dev`                          | Start the dev server (Turbopack)                       |
-| `pnpm build`                        | Production build                                       |
-| `pnpm start`                        | Run the production build                               |
-| `pnpm lint` / `pnpm lint:fix`       | ESLint                                                 |
-| `pnpm format` / `pnpm format:check` | Prettier (also sorts Tailwind classes)                 |
-| `pnpm typecheck`                    | Generate Next.js route types, then `tsc --noEmit`      |
-| `pnpm test` / `pnpm test:watch`     | Vitest unit tests                                      |
-| `pnpm test:e2e`                     | Playwright end-to-end tests (starts `pnpm dev` itself) |
+| Command                             | What it does                                                                                                                      |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                          | Start the dev server (Turbopack)                                                                                                  |
+| `pnpm build`                        | Production build                                                                                                                  |
+| `pnpm start`                        | Run the production build                                                                                                          |
+| `pnpm lint` / `pnpm lint:fix`       | ESLint                                                                                                                            |
+| `pnpm format` / `pnpm format:check` | Prettier (also sorts Tailwind classes)                                                                                            |
+| `pnpm typecheck`                    | Generate Next.js route types, then `tsc --noEmit`                                                                                 |
+| `pnpm test` / `pnpm test:watch`     | Vitest unit tests                                                                                                                 |
+| `pnpm test:e2e`                     | Playwright end-to-end tests (starts `pnpm dev` itself)                                                                            |
+| `pnpm test:rls`                     | Row-level security isolation test against the **dev** Supabase project in `.env.local`                                            |
+| `pnpm db:push`                      | Apply migrations in `supabase/migrations/` to the linked (remote) project. CLI 3 targets local Docker unless `--remote` is passed |
+| `pnpm db:types`                     | Regenerate `src/lib/supabase/database.types.ts` from the linked project                                                           |
 
 ## Folder structure
 
 ```text
 .
 ├── e2e/                      Playwright tests
+├── tests/rls/                RLS isolation test (pnpm test:rls)
 ├── public/                   Static files
 ├── supabase/
 │   ├── config.toml           Supabase CLI config (local dev stack)
-│   └── migrations/           SQL migrations (tables + RLS policies go here)
+│   ├── migrations/           SQL migrations (tables + RLS policies)
+│   └── templates/            Auth email templates (sign-in code + link)
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/           Logged-out pages: /login, /sign-up
-│   │   ├── (app)/            Logged-in area: /dashboard
+│   │   ├── (auth)/           Sign in (email → code), auth server actions
+│   │   ├── (app)/            Logged-in area: /dashboard (needs a session)
+│   │   ├── auth/confirm/     Handles the sign-in link from the email
 │   │   ├── layout.tsx        Root layout (fonts, toaster)
 │   │   ├── page.tsx          Home page
 │   │   └── globals.css       Tailwind + shadcn theme variables
@@ -103,12 +109,14 @@ How they are checked:
 │   │   ├── supabase/
 │   │   │   ├── client.ts     Supabase client for Client Components
 │   │   │   ├── server.ts     Supabase client for Server Components/Actions
-│   │   │   └── proxy.ts      Session refresh helper used by src/proxy.ts
+│   │   │   ├── proxy.ts      Session refresh helper used by src/proxy.ts
+│   │   │   └── database.types.ts  Generated DB types (pnpm db:types)
 │   │   ├── validation/       Zod schemas
 │   │   ├── env.ts            Public env validation
 │   │   ├── rate-limit.ts     Upstash rate limiter (server only)
 │   │   └── utils.ts          cn() helper for class names
 │   ├── server/               Server-only code (every file imports "server-only")
+│   │   ├── auth.ts           getCurrentUser() / requireUser()
 │   │   └── env.ts            Secret env validation
 │   └── proxy.ts              Refreshes the Supabase session on each request
 ├── next.config.ts            Security headers, env check
@@ -119,8 +127,8 @@ How they are checked:
 ## Notes
 
 - **Proxy, not middleware.** Next.js 16 renamed `middleware.ts` to `proxy.ts`.
-  `src/proxy.ts` refreshes the Supabase session and redirects logged-out
-  visitors to `/login`. That redirect is only an optimistic check. Always check
+  `src/proxy.ts` refreshes the Supabase session, sends signed-out visitors to
+  `/sign-in` and signed-in visitors on `/sign-in` to `/dashboard`. That redirect is only an optimistic check. Always check
   the user with `supabase.auth.getClaims()` on the server, and rely on RLS for
   data access. Never trust `getSession()` in server code.
 - **Forms.** shadcn's old `form` component is no longer in the current styles.
@@ -128,5 +136,34 @@ How they are checked:
   Hook Form's `Controller` and a Zod resolver.
 - **Security headers** are set in `next.config.ts`. A Content-Security-Policy is
   still a TODO.
-- **Supabase migrations.** Create one with `pnpm dlx supabase migration new <name>`.
-  Run a local stack with `pnpm dlx supabase start` (needs Docker).
+- **Supabase migrations.** Create one with `pnpm exec supabase migration new <name>`.
+  Run a local stack with `pnpm exec supabase start` (needs Docker).
+
+## Data model and security
+
+- Every business table has `organisation_id`. A user sees a row only if they
+  are a member of that organisation (Postgres RLS, see
+  `supabase/migrations/*_initial_schema.sql`).
+- Members can read, add and change rows. Only owners can delete rows and
+  manage memberships. The audit log can be read and added to, never changed.
+- Signing up creates an organisation ("My organisation") with the new user as
+  its owner. An organisation always keeps at least one owner.
+- Money is stored as whole pence (`integer`), never as decimals.
+- The service role key bypasses RLS. It is only used in `src/server/` and in
+  the RLS test setup.
+
+## Sign in
+
+Passwordless. The person enters their email, gets a 6-digit code (and a link)
+by email, and types the code in. New emails get an account automatically.
+
+Supabase dashboard settings this needs (hosted project):
+
+1. **Authentication → Emails → Templates**: paste
+   `supabase/templates/magic-link.html` into both **Magic Link** and
+   **Confirm signup**. The default templates only contain a link, not the code.
+2. **Authentication → URL Configuration**: Site URL = your app URL
+   (`http://localhost:3000` for the dev project).
+3. **Authentication → Emails → SMTP**: set up custom SMTP (for example Resend).
+   Supabase's built-in email sender is only for testing and allows very few
+   emails per hour.

@@ -65,6 +65,10 @@ registry), so they were run by the new workflow on GitHub Actions against the
 | `pnpm test:rls`                    | Not run here, run locally                            |
 | `pnpm test:e2e`                    | Not run here, run locally                            |
 
+The audit reported 1 low and 1 moderate advisory, both below the high
+threshold, so it passed. They are left for Dependabot or a later maintenance
+run.
+
 Security review of today's diff: only YAML and Markdown changed
 (`.github/`, `docs/`, `README.md`). No secrets, keys, tokens or `.env` files;
 no `NEXT_PUBLIC_` variables; no new server actions, route handlers, SQL or

@@ -83,6 +83,18 @@ How they are checked:
 | `pnpm db:push`                      | Apply migrations in `supabase/migrations/` to the linked (remote) project. CLI 3 targets local Docker unless `--remote` is passed |
 | `pnpm db:types`                     | Regenerate `src/lib/supabase/database.types.ts` from the linked project                                                           |
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` (and to `auto/*`
+branches) and on every pull request: install, typecheck, lint, format check,
+unit tests, a production build with `SKIP_ENV_VALIDATION=1`, and
+`pnpm audit --audit-level=high`. It needs no secrets and has read-only
+permissions. The RLS and end-to-end tests are not part of CI because they need
+a real Supabase project; run them locally.
+
+`.github/dependabot.yml` opens weekly pull requests for npm packages and
+GitHub Actions.
+
 ## Folder structure
 
 ```text

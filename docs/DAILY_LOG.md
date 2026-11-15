@@ -81,8 +81,7 @@ Decisions made without asking:
 
 - Ran the Step 5 checks in GitHub Actions instead of locally, because that was
   the only place they could run. Work went to `auto/2026-11-15` first; `main`
-  was only moved forward to a commit that had already passed every check, and
-  the branch was then removed.
+  was only moved forward to a commit that had already passed every check.
 - The workflow runs on pushes to `main` and `auto/**` and on all pull requests,
   rather than on pushes to every branch, so pull requests are not checked
   twice.
@@ -106,3 +105,15 @@ Needs a human:
   hand.
 - Still to do by hand from earlier work: run `pnpm test:rls` and
   `pnpm test:e2e` locally.
+
+### After the push
+
+- `main` was fast-forwarded to the checked commit and its CI run started.
+- **The `auto/2026-11-15` branch could not be deleted** (the environment
+  refuses branch deletion with a 403). It is fully merged and points at the
+  same commit as `main`. It is **not** a blocked build: the next run should
+  treat it as resolved and not count it as a task. The owner can delete it in
+  GitHub (Branches page).
+- Dependabot opened three pull requests straight away, for newer major
+  versions of the actions: `actions/checkout` 7, `actions/setup-node` 7 and
+  `pnpm/action-setup` 6. They were left for the owner to review and merge.

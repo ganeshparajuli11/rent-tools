@@ -7,7 +7,9 @@ import {
   DoorOpenIcon,
   PencilIcon,
   PlusIcon,
+  UserPlusIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -21,7 +23,7 @@ import {
   restoreRoomAction,
 } from "@/app/(app)/homes/actions";
 import { applyServerErrors, TextField } from "@/components/form-fields";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -30,9 +32,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ordinal } from "@/lib/dates";
+import { formatPence } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { roomNameSchema, type LetType } from "@/lib/validation/homes";
 
 type Room = { id: string; name: string };
+type RoomTenant = {
+  id: string;
+  name: string;
+  rentPence: number;
+  dueDay: number;
+};
+/** A room on the list, with its current tenant or null when it is empty. */
+type ListedRoom = Room & { tenant: RoomTenant | null };
 
 const renameFormSchema = z.object({ name: roomNameSchema });
 type RenameInput = z.input<typeof renameFormSchema>;
@@ -47,7 +60,7 @@ export function RoomList({
 }: {
   homeId: string;
   letType: LetType;
-  rooms: Room[];
+  rooms: ListedRoom[];
   archivedRooms: Room[];
   readOnly: boolean;
 }) {
@@ -109,35 +122,75 @@ export function RoomList({
           {rooms.map((room) => (
             <li
               key={room.id}
-              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start"
             >
-              <span className="flex flex-1 items-center gap-2 text-base font-medium">
-                <DoorOpenIcon aria-hidden="true" className="size-5 shrink-0" />
-                {room.name}
-              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="flex items-center gap-2 text-base font-medium">
+                  <DoorOpenIcon
+                    aria-hidden="true"
+                    className="size-5 shrink-0"
+                  />
+                  {room.name}
+                </span>
+                {room.tenant ? (
+                  <span className="flex flex-col text-base">
+                    <Link
+                      href={`/tenants/${room.tenant.id}`}
+                      className="inline-flex min-h-11 items-center self-start font-medium break-words underline underline-offset-4"
+                    >
+                      {room.tenant.name}
+                    </Link>
+                    <span className="text-muted-foreground">
+                      {formatPence(room.tenant.rentPence)} a month, due on the{" "}
+                      {ordinal(room.tenant.dueDay)}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-base text-muted-foreground">Empty</span>
+                )}
+              </div>
               {!readOnly ? (
-                <div className="grid grid-cols-2 gap-2 sm:flex">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                  {!room.tenant ? (
+                    <Link
+                      href={`/homes/${homeId}/tenants/new?room=${room.id}`}
+                      className={cn(
+                        buttonVariants(),
+                        "col-span-2 h-11 gap-2 px-4 text-base",
+                      )}
+                      aria-label={`Add a tenant to ${room.name}`}
+                    >
+                      <UserPlusIcon aria-hidden="true" className="size-4" />
+                      Add a tenant
+                    </Link>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11 gap-2 px-4 text-base"
+                    className={cn(
+                      "h-11 gap-2 px-4 text-base",
+                      room.tenant && "col-span-2",
+                    )}
                     onClick={() => setRenaming(room)}
                     aria-label={`Rename ${room.name}`}
                   >
                     <PencilIcon aria-hidden="true" className="size-4" />
                     Rename
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 gap-2 px-4 text-base"
-                    disabled={pending}
-                    onClick={() => archiveRoom(room)}
-                    aria-label={`Archive ${room.name}`}
-                  >
-                    <ArchiveIcon aria-hidden="true" className="size-4" />
-                    Archive
-                  </Button>
+                  {/* A room with a tenant cannot be archived. */}
+                  {!room.tenant ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 gap-2 px-4 text-base"
+                      disabled={pending}
+                      onClick={() => archiveRoom(room)}
+                      aria-label={`Archive ${room.name}`}
+                    >
+                      <ArchiveIcon aria-hidden="true" className="size-4" />
+                      Archive
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </li>

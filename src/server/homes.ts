@@ -49,6 +49,25 @@ export type HomeOwner = {
   dueDay: number;
 };
 
+/** The current tenant of a room or of a whole home, as shown on the home page. */
+export type TenantSummary = {
+  id: string;
+  name: string;
+  rentPence: number;
+  dueDay: number;
+};
+
+export type PastTenant = {
+  id: string;
+  name: string;
+  /** The room they lived in, or null for a whole-home let. */
+  roomName: string | null;
+  endDate: string;
+};
+
+/** How many past tenants the home page lists (newest first). */
+export const PAST_TENANTS_SHOWN = 20;
+
 export type HomeDetail = {
   id: string;
   name: string;
@@ -58,8 +77,13 @@ export type HomeDetail = {
   postcode: string;
   letType: LetType;
   archived: boolean;
-  rooms: { id: string; name: string }[];
+  /** Each room with its current tenant, or null when the room is empty. */
+  rooms: { id: string; name: string; tenant: TenantSummary | null }[];
   archivedRooms: { id: string; name: string }[];
+  /** The current tenant when the home is let as a whole (no room). */
+  wholeHomeTenant: TenantSummary | null;
+  pastTenants: PastTenant[];
+  pastTenantCount: number;
   owner: HomeOwner | null;
 };
 
@@ -151,7 +175,7 @@ export async function getHome(
   const { data, error } = await ctx.supabase
     .from("properties")
     .select(
-      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, name, archived_at, created_at), owner_leases(id, owner_name, owner_phone, rent_pence, due_day, start_date, end_date, created_at)",
+      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, name, archived_at, created_at), owner_leases(id, owner_name, owner_phone, rent_pence, due_day, start_date, end_date, created_at), tenancies(id, room_id, tenant_name, rent_pence, due_day, end_date)",
     )
     .eq("id", id)
     .eq("organisation_id", organisationId)
@@ -159,6 +183,34 @@ export async function getHome(
 
   if (error) throw error;
   if (!data) return null;
+
+  // Tenants came back in the same query, so there is no query per room.
+  const summary = (t: (typeof data.tenancies)[number]): TenantSummary => ({
+    id: t.id,
+    name: t.tenant_name,
+    rentPence: t.rent_pence,
+    dueDay: t.due_day,
+  });
+  const currentTenants = data.tenancies.filter((t) => t.end_date === null);
+  const wholeHomeTenant = currentTenants.find((t) => t.room_id === null);
+  const roomNames = new Map(data.rooms.map((room) => [room.id, room.name]));
+  const past = data.tenancies
+    .flatMap((t) =>
+      t.end_date === null
+        ? []
+        : [
+            {
+              id: t.id,
+              name: t.tenant_name,
+              roomName: t.room_id ? (roomNames.get(t.room_id) ?? null) : null,
+              endDate: t.end_date,
+            },
+          ],
+    )
+    .sort(
+      (a, b) =>
+        b.endDate.localeCompare(a.endDate) || a.name.localeCompare(b.name),
+    );
 
   const rooms = [...data.rooms].sort(
     (a, b) =>
@@ -181,10 +233,20 @@ export async function getHome(
     archived: data.archived_at !== null,
     rooms: rooms
       .filter((r) => r.archived_at === null)
-      .map((r) => ({ id: r.id, name: r.name })),
+      .map((r) => {
+        const tenant = currentTenants.find((t) => t.room_id === r.id);
+        return {
+          id: r.id,
+          name: r.name,
+          tenant: tenant ? summary(tenant) : null,
+        };
+      }),
     archivedRooms: rooms
       .filter((r) => r.archived_at !== null)
       .map((r) => ({ id: r.id, name: r.name })),
+    wholeHomeTenant: wholeHomeTenant ? summary(wholeHomeTenant) : null,
+    pastTenants: past.slice(0, PAST_TENANTS_SHOWN),
+    pastTenantCount: past.length,
     owner: lease
       ? {
           id: lease.id,
@@ -200,6 +262,32 @@ export async function getHome(
 // ---------------------------------------------------------------------------
 // Writes
 // ---------------------------------------------------------------------------
+
+/**
+ * How many current tenants (no end date) a home has: in one room, in the
+ * home let as a whole (`roomId: null`), or anywhere in it (`roomId` left out).
+ */
+async function countCurrentTenants(
+  ctx: Ctx,
+  organisationId: string,
+  where: { propertyId: string; roomId?: string | null },
+): Promise<number> {
+  let query = ctx.supabase
+    .from("tenancies")
+    .select("id", { count: "exact", head: true })
+    .eq("organisation_id", organisationId)
+    .eq("property_id", where.propertyId)
+    .is("end_date", null);
+  if (where.roomId === null) query = query.is("room_id", null);
+  else if (where.roomId) query = query.eq("room_id", where.roomId);
+
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+const WHOLE_HOME_HAS_TENANT =
+  "This home has a tenant for the whole home. Mark them as moved out before you add rooms.";
 
 function roomRows(
   organisationId: string,
@@ -298,6 +386,9 @@ export async function updateHome(
       throw new UserFacingError("Enter how many rooms this home has.");
     }
     roomsToCreate = values.roomCount;
+    if (before.wholeHomeTenant) {
+      throw new UserFacingError(WHOLE_HOME_HAS_TENANT);
+    }
   }
   if (values.letType === "whole_home" && before.rooms.length > 0) {
     throw new UserFacingError(
@@ -369,12 +460,35 @@ export async function updateHome(
     action: "home.updated",
     table: "properties",
     recordId: id,
-    changes: { before, after: values },
+    // Tenant names are left out: the audit log holds no tenant personal data.
+    changes: {
+      before: {
+        name: before.name,
+        addressLine1: before.addressLine1,
+        addressLine2: before.addressLine2,
+        city: before.city,
+        postcode: before.postcode,
+        letType: before.letType,
+        roomCount: before.rooms.length,
+        owner: before.owner,
+      },
+      after: values,
+    },
   });
 }
 
 export async function setHomeArchived(ctx: Ctx, id: string, archived: boolean) {
   const organisationId = await getOrganisationId(ctx);
+
+  // A home with tenants living in it stays on the list.
+  if (
+    archived &&
+    (await countCurrentTenants(ctx, organisationId, { propertyId: id })) > 0
+  ) {
+    throw new UserFacingError(
+      "This home still has a tenant. Mark each tenant as moved out before you archive it.",
+    );
+  }
 
   let query = ctx.supabase
     .from("properties")
@@ -409,6 +523,16 @@ export async function addRoom(ctx: Ctx, propertyId: string) {
     .maybeSingle();
   if (error) throw error;
   if (!home) throw new UserFacingError(NOT_FOUND);
+
+  // A home is let as a whole or by the room, not both at once.
+  if (
+    (await countCurrentTenants(ctx, organisationId, {
+      propertyId,
+      roomId: null,
+    })) > 0
+  ) {
+    throw new UserFacingError(WHOLE_HOME_HAS_TENANT);
+  }
 
   const name = `Room ${home.rooms.length + 1}`;
   const { data: room, error: insertError } = await ctx.supabase
@@ -473,6 +597,22 @@ export async function setRoomArchived(
   archived: boolean,
 ) {
   const organisationId = await getOrganisationId(ctx);
+
+  if (archived) {
+    // A room with a tenant living in it cannot be archived.
+    const { count, error: tenantError } = await ctx.supabase
+      .from("tenancies")
+      .select("id", { count: "exact", head: true })
+      .eq("organisation_id", organisationId)
+      .eq("room_id", roomId)
+      .is("end_date", null);
+    if (tenantError) throw tenantError;
+    if ((count ?? 0) > 0) {
+      throw new UserFacingError(
+        "This room has a tenant. Mark them as moved out before you archive it.",
+      );
+    }
+  }
 
   let query = ctx.supabase
     .from("rooms")

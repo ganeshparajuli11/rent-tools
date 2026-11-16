@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, PencilIcon, UsersIcon } from "lucide-react";
+import { ChevronLeftIcon, PencilIcon, UserPlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,7 +9,7 @@ import {
 } from "@/components/homes/home-archive-buttons";
 import { RoomList } from "@/components/homes/room-list";
 import { buttonVariants } from "@/components/ui/button";
-import { ordinal } from "@/lib/dates";
+import { formatDate, ordinal } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -128,21 +128,78 @@ export default async function HomeDetailPage({
         readOnly={home.archived}
       />
 
-      <section
-        aria-labelledby="tenants-heading"
-        className="flex flex-col gap-2"
-      >
-        <h2 id="tenants-heading" className="text-xl font-semibold">
-          Tenants
-        </h2>
-        <div className="flex items-start gap-3 rounded-xl border border-dashed p-4">
-          <UsersIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
-          <p className="text-base text-muted-foreground">
-            Tenants are coming next. Soon you will be able to add a tenant to
-            each room and track their rent here.
-          </p>
-        </div>
-      </section>
+      {/* Let as a whole home: the tenant is shown here, not against a room. */}
+      {home.rooms.length === 0 || home.wholeHomeTenant ? (
+        <section
+          aria-labelledby="tenant-heading"
+          className="flex flex-col gap-3"
+        >
+          <h2 id="tenant-heading" className="text-xl font-semibold">
+            Tenant
+          </h2>
+          {home.wholeHomeTenant ? (
+            <div className="flex flex-col rounded-xl border p-4 text-base">
+              <Link
+                href={`/tenants/${home.wholeHomeTenant.id}`}
+                className="inline-flex min-h-11 items-center self-start font-medium break-words underline underline-offset-4"
+              >
+                {home.wholeHomeTenant.name}
+              </Link>
+              <span className="text-muted-foreground">
+                {formatPence(home.wholeHomeTenant.rentPence)} a month, due on
+                the {ordinal(home.wholeHomeTenant.dueDay)}
+              </span>
+            </div>
+          ) : (
+            <>
+              <p className="text-base text-muted-foreground">
+                Empty. This home has no tenant.
+              </p>
+              {!home.archived ? (
+                <Link
+                  href={`/homes/${home.id}/tenants/new`}
+                  className={cn(
+                    buttonVariants({ size: "lg" }),
+                    "h-12 gap-2 px-6 text-base sm:self-start",
+                  )}
+                >
+                  <UserPlusIcon aria-hidden="true" className="size-5" />
+                  Add a tenant
+                </Link>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {home.pastTenantCount > 0 ? (
+        <details className="rounded-xl border p-4">
+          <summary className="min-h-11 cursor-pointer content-center text-base">
+            Past tenants ({home.pastTenantCount})
+          </summary>
+          <ul className="mt-3 flex flex-col gap-3">
+            {home.pastTenants.map((tenant) => (
+              <li key={tenant.id} className="flex flex-col text-base">
+                <Link
+                  href={`/tenants/${tenant.id}`}
+                  className="inline-flex min-h-11 items-center self-start font-medium break-words underline underline-offset-4"
+                >
+                  {tenant.name}
+                </Link>
+                <span className="text-muted-foreground">
+                  {tenant.roomName ? `${tenant.roomName}. ` : ""}Moved out on{" "}
+                  {formatDate(tenant.endDate)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {home.pastTenantCount > home.pastTenants.length ? (
+            <p className="mt-3 text-base text-muted-foreground">
+              Showing the {home.pastTenants.length} most recent.
+            </p>
+          ) : null}
+        </details>
+      ) : null}
 
       {!home.archived ? (
         <section className="border-t pt-6">

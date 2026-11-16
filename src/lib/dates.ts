@@ -32,3 +32,60 @@ export function ordinal(day: number): string {
       return `${day}th`;
   }
 }
+
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** True for a real calendar date written as "YYYY-MM-DD" (so not 30 February). */
+export function isValidDateString(value: string): boolean {
+  const match = DATE_PATTERN.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+/**
+ * Moves a "YYYY-MM-DD" date by whole years. 29 February moves to
+ * 28 February when the new year is not a leap year.
+ */
+export function addYears(value: string, years: number): string {
+  const match = DATE_PATTERN.exec(value);
+  if (!match || !isValidDateString(value)) {
+    throw new Error("addYears expects a YYYY-MM-DD date");
+  }
+  const year = String(Number(match[1]) + years).padStart(4, "0");
+  const moved = `${year}-${match[2]}-${match[3]}`;
+  return isValidDateString(moved) ? moved : `${year}-02-28`;
+}
+
+const longDate = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/**
+ * "2026-01-05" -> "5 January 2026". The value is a calendar date with no
+ * time, so it is formatted as-is and never shifted by a time zone.
+ */
+export function formatDate(value: string): string {
+  const match = DATE_PATTERN.exec(value);
+  if (!match || !isValidDateString(value)) return value;
+  return longDate.format(
+    new Date(
+      Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+    ),
+  );
+}
+
+/** The later of two "YYYY-MM-DD" dates. */
+export function laterDate(a: string, b: string): string {
+  return a >= b ? a : b;
+}

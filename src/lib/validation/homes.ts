@@ -3,6 +3,8 @@ import { z } from "zod";
 import { poundsToPence } from "@/lib/money";
 import { normalisePostcode } from "@/lib/postcode";
 
+import { optionalText, requiredText } from "./common";
+
 /**
  * Shared schemas for homes (database: properties) and rooms.
  * The SAME schemas run in the browser (React Hook Form) and in server actions.
@@ -11,21 +13,6 @@ import { normalisePostcode } from "@/lib/postcode";
  */
 
 export const MAX_ROOMS = 30;
-
-const requiredText = (message: string, max = 200) =>
-  z
-    .string({ error: message })
-    .trim()
-    .min(1, { error: message })
-    .max(max, { error: `Please use ${max} characters or fewer` });
-
-const optionalText = (max = 200) =>
-  z
-    .string()
-    .trim()
-    .max(max, { error: `Please use ${max} characters or fewer` })
-    .optional()
-    .transform((value) => (value ? value : null));
 
 export const postcodeSchema = z
   .string({ error: "Enter the postcode" })

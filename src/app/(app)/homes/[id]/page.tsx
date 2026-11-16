@@ -38,7 +38,7 @@ export default async function HomeDetailPage({
   ].filter(Boolean);
 
   return (
-    <article className="flex flex-col gap-8">
+    <article className="flex max-w-3xl flex-col gap-8">
       <Link
         href="/homes"
         className="inline-flex min-h-11 items-center gap-1 self-start text-base underline-offset-4 hover:underline"

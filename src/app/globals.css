@@ -128,3 +128,24 @@
     @apply font-sans;
   }
 }
+
+/*
+ * One clear focus ring for everyone who uses a keyboard.
+ *
+ * This rule is outside every @layer on purpose: un-layered CSS wins over
+ * Tailwind utilities, so it still applies where a component says
+ * `outline-none` and only draws a faint ring. The ring uses the text colour,
+ * which has strong contrast in both the light and the dark theme.
+ * Elements with tabindex="-1" (the main area, step headings) only receive
+ * focus from scripts and skip links, so they are left without a ring.
+ */
+:focus-visible:not([tabindex="-1"]) {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible:not([tabindex="-1"]) {
+    outline-color: Highlight;
+  }
+}

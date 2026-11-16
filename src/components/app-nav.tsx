@@ -15,13 +15,13 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Phone: fixed bar at the bottom. Icons always have a visible label. */
+/** Phones and tablets: fixed bar at the bottom. Icons always have a visible label. */
 export function BottomNav() {
   const pathname = usePathname();
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <ul className="grid grid-cols-2">
         {LINKS.map(({ href, label, icon: Icon }) => {
@@ -49,7 +49,7 @@ export function BottomNav() {
   );
 }
 
-/** Desktop: simple sidebar with labelled links. */
+/** 1024px and wider: sidebar with labelled links. */
 export function SideNav() {
   const pathname = usePathname();
   return (

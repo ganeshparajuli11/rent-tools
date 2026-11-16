@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   const organisationName = membership?.organisations?.name;
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex max-w-3xl flex-col gap-4">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
       <Card>
         <CardHeader>

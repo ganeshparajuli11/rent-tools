@@ -30,21 +30,38 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex flex-1">
-      {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-6 border-r p-4 md:flex">
+      {/* First stop for keyboard users: jump past the menu. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-background focus:px-4 focus:py-3 focus:text-base focus:font-medium focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
+      {/* Laptops and desktops (1024px and wider): the menu is always on show. */}
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 overflow-y-auto border-r bg-sidebar p-4 lg:flex">
         <AppName className="px-3 text-xl [&_svg]:size-6" />
         <SideNav />
         <div className="mt-auto">{signOutButton}</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Phone header */}
-        <header className="flex items-center justify-between gap-4 border-b px-4 py-2 md:hidden">
+        {/* Phone and tablet header */}
+        <header className="flex items-center justify-between gap-4 border-b px-4 py-2 lg:hidden">
           <AppName className="text-lg [&_svg]:size-5" />
           <div className="w-32">{signOutButton}</div>
         </header>
-        {/* pb-24 keeps content clear of the bottom bar on phones */}
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-28 md:pb-10">
+        {/*
+          One centred column. It is wide enough for tables; forms and detail
+          pages set their own narrower width inside it.
+          pb-28 keeps content clear of the bottom bar on phones and tablets.
+          tabIndex lets the "Skip to main content" link move focus here.
+        */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-28 outline-none sm:px-6 lg:px-8 lg:pt-10 lg:pb-10"
+        >
           {children}
         </main>
       </div>

@@ -289,3 +289,12 @@ Needs a human:
 - Delete the merged branches `auto/2026-11-15` and `auto/2026-11-16` in
   GitHub (this environment cannot delete branches).
 - Six Dependabot pull requests are open (#1 to #6); review and merge by hand.
+
+### After the push
+
+- `main` was fast-forwarded twice, each time to a commit that had already
+  passed on the branch: first after the desktop pass (`3406789`), then after
+  tenants and the log (`893c2f8`). The CI run on `main` for `893c2f8` passed.
+- The `auto/2026-11-16` branch is fully merged and is **not** a blocked build.
+  It could not be deleted from here; the next run should treat it, and
+  `auto/2026-11-15`, as resolved and not count them as a task.

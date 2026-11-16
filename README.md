@@ -8,7 +8,11 @@ Mobile first, plain words, very simple screens. Multi-tenant: each landlord's
 data is isolated by `organisation_id` with Postgres row-level security (RLS) in
 Supabase.
 
-> Status: project setup only. No features are built yet.
+> Status: sign-in, homes and rooms, and tenants are built. Rent tracking and
+> the dashboard come next. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the
+> plan, [`docs/DAILY_LOG.md`](docs/DAILY_LOG.md) for what each daily build did,
+> and [`docs/PENDING_MIGRATIONS.md`](docs/PENDING_MIGRATIONS.md) for database
+> changes waiting to be applied.
 
 ## Stack
 
@@ -109,7 +113,7 @@ GitHub Actions.
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/           Sign in (email → code), auth server actions
-│   │   ├── (app)/            Logged-in area: /dashboard (needs a session)
+│   │   ├── (app)/            Logged-in area: /dashboard, /homes, /tenants (needs a session)
 │   │   ├── auth/confirm/     Handles the sign-in link from the email
 │   │   ├── layout.tsx        Root layout (fonts, toaster)
 │   │   ├── page.tsx          Home page
@@ -129,6 +133,9 @@ GitHub Actions.
 │   │   └── utils.ts          cn() helper for class names
 │   ├── server/               Server-only code (every file imports "server-only")
 │   │   ├── auth.ts           getCurrentUser() / requireUser()
+│   │   ├── run-action.ts     Wrapper every server action uses (session, rate limit)
+│   │   ├── homes.ts          Homes and rooms: reads and writes
+│   │   ├── tenants.ts        Tenants: reads and writes
 │   │   └── env.ts            Secret env validation
 │   └── proxy.ts              Refreshes the Supabase session on each request
 ├── next.config.ts            Security headers, env check
@@ -150,6 +157,31 @@ GitHub Actions.
   still a TODO.
 - **Supabase migrations.** Create one with `pnpm exec supabase migration new <name>`.
   Run a local stack with `pnpm exec supabase start` (needs Docker).
+
+## Screens and layout
+
+- Phones and tablets (under 1024px): a header, a bottom bar with labelled
+  icons, and lists shown as cards.
+- Laptops and desktops (1024px and wider): a sidebar that is always on show,
+  and lists shown as tables. Table headings are links that sort the list in
+  the database (`?sort=` and `?dir=`), because lists are paginated.
+- Forms and detail pages keep a fixed, narrow width on every screen.
+- Every focusable element gets the same strong focus ring (`globals.css`), and
+  the first Tab stop is a "Skip to main content" link.
+
+## Tenants
+
+- A tenant is added from a room (or from a home let as a whole) in three
+  short steps: who they are, their rent and move-in date, and an optional
+  deposit.
+- A room, or a home let as a whole, has one current tenant at a time. A
+  tenant is current while `tenancies.end_date` is empty.
+- "Tenant moved out" sets `end_date` and frees the room. It can be undone from
+  the toast, or later from the past tenant's page.
+- Changing the rent changes `tenancies.rent_pence` only, so it applies to
+  future months. Months already recorded keep their amount.
+- The audit log records what changed for a tenant, but never their name,
+  phone number or email.
 
 ## Data model and security
 

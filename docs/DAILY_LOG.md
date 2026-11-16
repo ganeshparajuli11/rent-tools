@@ -176,3 +176,116 @@ Needs a human:
 - Risks: the database code cannot be run here (no Supabase credentials), so
   it is checked by types and by reading only. The migration cannot be applied
   by this run, so the code must behave correctly before it is applied too.
+
+### Result
+
+**Task 1 — Desktop pass (item 2): done.**
+
+- Sidebar from 1024px; phones and tablets keep the header and bottom bar.
+- "Skip to main content" is the first Tab stop on every signed-in page.
+- Main column is centred and up to 1024px wide; forms stay at 576px and
+  detail pages at 768px.
+- Homes list: sortable table (Home, Address, Postcode; Rooms is not sortable)
+  from 1024px, cards below. Sort and direction live in the address and are
+  kept when paging or showing archived homes.
+- One strong focus ring on every focusable element, in light and dark themes
+  and in Windows high-contrast mode.
+
+**Task 2 — Tenants (item 3): done.**
+
+- Add a tenant from a room, or from a home let as a whole, in three steps
+  (name and contact; rent, due day, move-in date; optional deposit).
+- One current tenant per room or whole home, checked in the app and, once the
+  pending migration is applied, by the database.
+- Tenant page and edit page. A rent change only changes the tenancy, so it
+  applies to future months.
+- "Tenant moved out" sets the end date and frees the room, with Undo in the
+  toast and a "They have not moved out" button on the past tenant's page.
+- The home page shows each room's tenant or "Empty", and a list of past
+  tenants. Tenants load in the same query as the home (no query per room).
+
+Checks. As yesterday, none could run in the build environment, so they ran in
+GitHub Actions on `auto/2026-11-16` before `main` was moved:
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+The audit still reports the same 1 low and 1 moderate advisory as yesterday.
+
+**What has not been checked.** The new tenant code has passed type checking,
+lint, unit tests and a production build, but it has never run against a real
+database or in a real browser, and nobody has looked at the new layout. The
+isolation tests and Playwright journeys written today are the way to check
+it: please run `pnpm test:rls` and `pnpm test:e2e` locally before relying on
+it.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, API keys, private keys and JWT-shaped strings). The only
+  matches are two test messages that name the `SUPABASE_SERVICE_ROLE_KEY`
+  variable.
+- No new `NEXT_PUBLIC_` variable. No service-role client outside the existing
+  test helpers. No client component imports from `src/server/`.
+- Four new server actions (`src/app/(app)/tenants/actions.ts`), no new route
+  handlers. Each validates with a shared Zod schema and goes through
+  `runAction`, which checks the session and applies the rate limiter; the
+  data functions derive the organisation from memberships, filter by it, and
+  write `audit_log`.
+- No raw SQL, no `dangerouslySetInnerHTML`. The sort column comes from a
+  fixed list, never from the address. Errors shown to people are plain
+  messages; error codes only go to the server log.
+- The migration adds indexes only: no new table, no policy change.
+- Nothing existing was weakened. `next.config.ts`, `src/proxy.ts`, the rate
+  limiter and the first migration are untouched. The homes actions keep the
+  same session check and the same rate limit; that code moved into
+  `src/server/run-action.ts` so tenants use it too.
+
+Pending migrations (see `docs/PENDING_MIGRATIONS.md`):
+
+- `20261116030000_one_current_tenant_per_place.sql`: unique indexes for one
+  current tenant per room and per whole home. No type changes.
+
+Decisions made without asking:
+
+- Worked on a branch and checked through GitHub Actions rather than skipping
+  feature work for a second day (see "Start of run").
+- Sorting is done by the server through links, not with TanStack Table in the
+  browser, because the list is paginated. TanStack Table is still unused.
+- The rooms list stays a list on desktop: it has one column and its buttons,
+  so a table would add nothing.
+- "Current tenant" means the tenancy has no end date. Moving out sets the end
+  date to today in London (or to the move-in date, if that is later).
+- A move-in date can be up to one year ahead and 50 years back.
+- A room or home with a current tenant cannot be archived, and rooms cannot
+  be added to a home that has a whole-home tenant. The message says to mark
+  the tenant as moved out first.
+- The audit log never stores a tenant's name, phone or email (it records the
+  rent, dates and which contact fields changed). This keeps personal data in
+  one table, ready for the data-rights item.
+- No tenants list page or menu entry yet: tenants are reached from their
+  home. The rent page (item 4) will be the place to see everyone.
+- The Playwright desktop project now uses a 1440px viewport, and specs named
+  `*-desktop.spec.ts` run on desktop only.
+- No new dependencies.
+
+Needs a human:
+
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Second day running. Without it the run cannot install packages, run any
+  check itself, or open the app in a browser.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally**, and look at the homes
+  list, a home and a tenant at 375, 768 and 1440px.
+- Review and apply the pending migration.
+- Delete the merged branches `auto/2026-11-15` and `auto/2026-11-16` in
+  GitHub (this environment cannot delete branches).
+- Six Dependabot pull requests are open (#1 to #6); review and merge by hand.

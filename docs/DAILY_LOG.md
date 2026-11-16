@@ -117,3 +117,62 @@ Needs a human:
 - Dependabot opened three pull requests straight away, for newer major
   versions of the actions: `actions/checkout` 7, `actions/setup-node` 7 and
   `pnpm/action-setup` 6. They were left for the owner to review and merge.
+
+## 2026-11-16
+
+### Start of run
+
+- Latest CI run on `main` (commit `6416efa`): passed. Nothing to fix.
+- No open "Daily build blocked" issue. The `auto/2026-11-15` branch still
+  exists but yesterday's log says it is fully merged and not a blocked build
+  (it points at the same commit as `main`), so it was not counted as a task.
+- **Environment problem, same as yesterday:** `pnpm install --frozen-lockfile`
+  cannot run. `registry.npmjs.org` does not resolve directly and the egress
+  proxy refuses it with a 403 (a policy denial, so it was not retried or
+  worked around). There is no `node_modules`, so no check can run in the build
+  environment and the Next.js guides in `node_modules/next/dist/docs/` cannot
+  be read.
+- Decision: do not lose a second day. Work goes to the branch
+  `auto/2026-11-16`, where the CI workflow runs every Step 5 check
+  (typecheck, lint, format, unit tests, build, audit). `main` only moves
+  forward to a commit that has passed all of them. New code follows the
+  patterns already in `src/` (which were written against the installed
+  Next.js 16 docs) and uses no Next.js API that the existing code does not
+  already use.
+
+### Plan
+
+**Task 1 — Desktop pass on existing screens (backlog item 2)**
+
+- Scope: sidebar from 1024px (it was 768px) with the phone header and bottom
+  bar below that; "Skip to main content" link; wider centred container for
+  list pages, fixed-width columns for forms and detail pages; homes list as a
+  sortable table from 1024px and cards below; one strong, consistent focus
+  ring on every focusable element.
+- Sorting is done in the database through `?sort=` and `?dir=` links, not in
+  the browser, because the list is paginated: sorting one page of twenty in
+  the browser would give wrong answers. The headings are plain links, so they
+  work with a keyboard and without JavaScript.
+- Files: `src/app/(app)/layout.tsx`, `src/components/app-nav.tsx`,
+  `src/app/globals.css`, `src/app/(app)/homes/page.tsx`,
+  `src/components/homes/homes-table.tsx` (new), `src/lib/homes-sort.ts` (new),
+  `src/server/homes.ts`, detail, dashboard and form pages for widths.
+- Tests: unit tests for the sort and link helpers; a Playwright desktop spec
+  (sidebar, table, sorting, skip link) and a tablet check in the phone spec.
+- Risks: nothing can be looked at in a browser here, so layout is checked by
+  build and by reading only; it needs a look by hand at 375, 768 and 1440px.
+
+**Task 2 — Tenants (backlog item 3)**
+
+- Scope: add a tenant from a home or room in three short steps; one current
+  tenant per room or whole home; tenant page and edit; "Tenant moved out" with
+  Undo; home page shows each room's tenant or "Empty".
+- Files: `src/lib/validation/tenants.ts`, `src/server/tenants.ts`,
+  `src/app/(app)/tenants/**`, `src/components/tenants/**`, home detail page
+  and room list, a new migration for the one-current-tenant rule,
+  `database.types.ts`, `docs/PENDING_MIGRATIONS.md`, `tests/rls`, `e2e`.
+- Tests: unit tests for the schemas and date helpers; isolation cases; a
+  Playwright journey at phone and desktop widths.
+- Risks: the database code cannot be run here (no Supabase credentials), so
+  it is checked by types and by reading only. The migration cannot be applied
+  by this run, so the code must behave correctly before it is applied too.

@@ -22,8 +22,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "@/lib/supabase/database.types";
 import type { UpdateHomeValues } from "@/lib/validation/homes";
+import type { TenantValues } from "@/lib/validation/tenants";
 import { type Ctx, UserFacingError } from "@/server/context";
 import * as homes from "@/server/homes";
+import * as tenants from "@/server/tenants";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -553,5 +555,204 @@ describe("homes server actions: user A cannot touch user B's home or rooms", () 
         "home.restored",
       ]),
     );
+  });
+});
+
+/**
+ * The tenants server actions are thin wrappers around these data functions,
+ * just like homes. Each user already has one current tenant in their room
+ * (created in createSignedInUser).
+ */
+describe("tenants server actions: user A cannot touch user B's tenants", () => {
+  const ctxOf = (user: TestUser): Ctx => ({
+    supabase: user.client as unknown as SupabaseClient<Database>,
+    userId: user.userId,
+  });
+
+  const values: TenantValues = {
+    name: "Taken over",
+    phone: null,
+    email: null,
+    rentPence: 1,
+    dueDay: 1,
+    startDate: "2026-02-01",
+    depositPence: 0,
+  };
+
+  async function snapshotB() {
+    const { data } = await admin
+      .from("tenancies")
+      .select("id, tenant_name, rent_pence, due_day, start_date, end_date")
+      .eq("organisation_id", b.orgId)
+      .order("id");
+    return data;
+  }
+
+  it("cannot read B's tenant, and B's tenant is not on A's home", async () => {
+    expect(await tenants.getTenant(ctxOf(a), b.ids.tenancies)).toBeNull();
+    expect((await tenants.getTenant(ctxOf(b), b.ids.tenancies))?.name).toBe(
+      "Tenant B",
+    );
+
+    const home = await homes.getHome(ctxOf(a), a.ids.properties);
+    expect(home?.rooms.map((r) => r.tenant?.name)).toEqual(["Tenant A"]);
+  });
+
+  it("cannot add a tenant to B's home or room, or edit, move out or bring back B's tenant", async () => {
+    const before = await snapshotB();
+    const ctx = ctxOf(a);
+
+    const attempts: [string, () => Promise<unknown>][] = [
+      [
+        "createTenant in B's home",
+        () =>
+          tenants.createTenant(
+            ctx,
+            { homeId: b.ids.properties, roomId: null },
+            values,
+          ),
+      ],
+      [
+        "createTenant in B's room",
+        () =>
+          tenants.createTenant(
+            ctx,
+            { homeId: b.ids.properties, roomId: b.ids.rooms },
+            values,
+          ),
+      ],
+      [
+        "createTenant in A's home but B's room",
+        () =>
+          tenants.createTenant(
+            ctx,
+            { homeId: a.ids.properties, roomId: b.ids.rooms },
+            values,
+          ),
+      ],
+      [
+        "updateTenant",
+        () => tenants.updateTenant(ctx, b.ids.tenancies, values),
+      ],
+      ["moveTenantOut", () => tenants.moveTenantOut(ctx, b.ids.tenancies)],
+      [
+        "undoMoveTenantOut",
+        () => tenants.undoMoveTenantOut(ctx, b.ids.tenancies),
+      ],
+    ];
+
+    for (const [name, attempt] of attempts) {
+      await expect(attempt(), name).rejects.toBeInstanceOf(UserFacingError);
+    }
+
+    expect(await snapshotB()).toEqual(before);
+  });
+
+  it("still works on A's own home, one current tenant per room (positive control)", async () => {
+    const ctx = ctxOf(a);
+    const created = await homes.createHome(ctx, {
+      name: `Tenants ${runId}`,
+      addressLine1: "3 Test Road",
+      addressLine2: null,
+      city: null,
+      postcode: "LS6 1AA",
+      letType: "by_room",
+      roomCount: 2,
+      owner: null,
+    });
+    const home = await homes.getHome(ctx, created.id);
+    const [room1, room2] = home!.rooms;
+    const place = { homeId: created.id, roomId: room1!.id };
+
+    const first = await tenants.createTenant(ctx, place, {
+      ...values,
+      name: "Amira Khan",
+      email: "amira@example.com",
+      rentPence: 55_000,
+      dueDay: 5,
+    });
+
+    // The room is taken; the other room is not; the home needs a room.
+    await expect(
+      tenants.createTenant(ctx, place, values),
+    ).rejects.toBeInstanceOf(UserFacingError);
+    await expect(
+      tenants.createTenant(ctx, { homeId: created.id, roomId: null }, values),
+    ).rejects.toBeInstanceOf(UserFacingError);
+    // A room with a tenant cannot be archived, nor can its home.
+    await expect(
+      homes.setRoomArchived(ctx, room1!.id, true),
+    ).rejects.toBeInstanceOf(UserFacingError);
+    await expect(
+      homes.setHomeArchived(ctx, created.id, true),
+    ).rejects.toBeInstanceOf(UserFacingError);
+
+    const withTenant = await homes.getHome(ctx, created.id);
+    expect(withTenant?.rooms.map((r) => r.tenant?.name ?? null)).toEqual([
+      "Amira Khan",
+      null,
+    ]);
+
+    // Edit the rent, then read it back.
+    await tenants.updateTenant(ctx, first.id, {
+      ...values,
+      name: "Amira Khan",
+      email: "amira@example.com",
+      rentPence: 60_000,
+      dueDay: 5,
+    });
+    const detail = await tenants.getTenant(ctx, first.id);
+    expect(detail?.rentPence).toBe(60_000);
+    expect(detail?.home.id).toBe(created.id);
+    expect(detail?.room?.id).toBe(room1!.id);
+    expect(detail?.endDate).toBeNull();
+
+    // Moved out frees the room; undo takes it back.
+    await tenants.moveTenantOut(ctx, first.id);
+    expect((await tenants.getTenant(ctx, first.id))?.endDate).not.toBeNull();
+    const freed = await homes.getHome(ctx, created.id);
+    expect(freed?.rooms[0]?.tenant).toBeNull();
+    expect(freed?.pastTenants.map((t) => t.name)).toEqual(["Amira Khan"]);
+
+    await tenants.undoMoveTenantOut(ctx, first.id);
+    expect((await tenants.getTenant(ctx, first.id))?.endDate).toBeNull();
+
+    // Moved out again, someone new moves in: the old tenant cannot come back.
+    await tenants.moveTenantOut(ctx, first.id);
+    const second = await tenants.createTenant(ctx, place, {
+      ...values,
+      name: "Ben Osei",
+    });
+    await expect(
+      tenants.undoMoveTenantOut(ctx, first.id),
+    ).rejects.toBeInstanceOf(UserFacingError);
+    await tenants.createTenant(
+      ctx,
+      { homeId: created.id, roomId: room2!.id },
+      { ...values, name: "Cara Lee" },
+    );
+
+    const after = await homes.getHome(ctx, created.id);
+    expect(after?.rooms.map((r) => r.tenant?.name ?? null)).toEqual([
+      "Ben Osei",
+      "Cara Lee",
+    ]);
+
+    // Writes left audit rows, with no names, phone numbers or emails in them.
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("action, changes")
+      .in("record_id", [first.id, second.id]);
+    expect(audit?.map((r) => r.action)).toEqual(
+      expect.arrayContaining([
+        "tenant.created",
+        "tenant.updated",
+        "tenant.moved_out",
+        "tenant.move_out_undone",
+      ]),
+    );
+    const logged = JSON.stringify(audit);
+    expect(logged).not.toContain("Amira");
+    expect(logged).not.toContain("amira@example.com");
   });
 });

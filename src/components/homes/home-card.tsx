@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { HomeListItem } from "@/server/homes";
 
-function roomsLabel(home: HomeListItem) {
+export function roomsLabel(home: HomeListItem) {
   if (home.letType === "whole_home" && home.roomCount === 0)
     return "Whole home";
   return home.roomCount === 1 ? "1 room" : `${home.roomCount} rooms`;

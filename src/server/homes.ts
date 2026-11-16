@@ -1,6 +1,11 @@
 import "server-only";
 
 import { todayInLondon } from "@/lib/dates";
+import {
+  DEFAULT_HOMES_SORT,
+  type HomeSortKey,
+  type HomesSort,
+} from "@/lib/homes-sort";
 import type { LetType, UpdateHomeValues } from "@/lib/validation/homes";
 import { type CreateHomeValues } from "@/lib/validation/homes";
 
@@ -26,7 +31,11 @@ export const HOMES_PAGE_SIZE = 20;
 export type HomeListItem = {
   id: string;
   name: string;
+  /** Full address on one line, for cards. */
   address: string;
+  /** Address without the postcode, for the table's own postcode column. */
+  street: string;
+  postcode: string;
   roomCount: number;
   letType: LetType;
   archived: boolean;
@@ -73,9 +82,20 @@ export function formatAddress(parts: {
 // Reads
 // ---------------------------------------------------------------------------
 
+/** Database column behind each sortable heading. Fixed list, never user text. */
+const SORT_COLUMNS = {
+  name: "name",
+  address: "address_line1",
+  postcode: "postcode",
+} as const satisfies Record<HomeSortKey, string>;
+
 export async function listHomes(
   ctx: Ctx,
-  { page, includeArchived }: { page: number; includeArchived: boolean },
+  {
+    page,
+    includeArchived,
+    sort = DEFAULT_HOMES_SORT,
+  }: { page: number; includeArchived: boolean; sort?: HomesSort },
 ) {
   const organisationId = await getOrganisationId(ctx);
   const from = (page - 1) * HOMES_PAGE_SIZE;
@@ -91,8 +111,11 @@ export async function listHomes(
 
   if (!includeArchived) query = query.is("archived_at", null);
 
+  // Current homes first, then the chosen column. Name and id break ties so
+  // the order is stable from one page to the next.
   const { data, count, error } = await query
     .order("archived_at", { ascending: true, nullsFirst: true })
+    .order(SORT_COLUMNS[sort.key], { ascending: sort.direction === "asc" })
     .order("name", { ascending: true })
     .order("id", { ascending: true })
     .range(from, from + HOMES_PAGE_SIZE - 1);
@@ -103,6 +126,8 @@ export async function listHomes(
     id: row.id,
     name: row.name,
     address: formatAddress(row),
+    street: formatAddress({ ...row, postcode: null }),
+    postcode: row.postcode ?? "",
     roomCount: row.rooms.filter((room) => room.archived_at === null).length,
     letType: toLetType(row.property_type),
     archived: row.archived_at !== null,

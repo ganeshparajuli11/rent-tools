@@ -28,10 +28,19 @@ export default defineConfig({
   },
   // Mobile first: test a phone and a desktop browser.
   projects: [
-    { name: "mobile", use: { ...devices["Pixel 7"] } },
+    // Specs named *-desktop.spec.ts are written for a wide screen only.
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testIgnore: /-desktop\.spec\.ts/,
+    },
     {
       name: "desktop",
-      use: { ...devices["Desktop Chrome"] },
+      // 1440px wide, the desktop size every screen must work at.
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+      },
       // The homes journey is specified for the phone viewport.
       testIgnore: /homes\.spec\.ts/,
     },

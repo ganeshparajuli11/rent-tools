@@ -364,3 +364,184 @@ Needs a human:
 - Risks: "overdue" needs every unpaid month, however old, so the charges
   query can grow with history. It is read in pages with a hard stop; a
   database view with balances is the long-term answer (item 11).
+
+### Result
+
+**Task 1 — Rent ledger (item 4): done.**
+
+- One rent charge per tenant per calendar month. Charges are made when a
+  tenant is added (move-in month to this month), again when a move-in date is
+  changed or a "moved out" is undone, and by the daily cron route. Months
+  that already have a charge are skipped, so repeating any of these changes
+  nothing and old months keep the rent they were made with.
+- `GET /api/cron/rent-charges` is protected by a rate limit and by the
+  `Authorization: Bearer <CRON_SECRET>` header. With no secret set it refuses
+  everything. It is the only code that uses the service-role client, and a
+  unit test fails if any other file imports that client or reads the key.
+- Status is worked out, never stored: Paid, Part paid, Due, Late. All month
+  and date logic is in `src/lib/rent.ts`, in Europe/London, with unit tests.
+- `/rent` shows one month (this month by default, earlier months by link),
+  late tenants first, with totals. "Mark as paid" is one tap and records what
+  is left. "Other amount" opens a one-field form for a part payment. A month
+  can have several payments. Each payment can be removed. Recording and
+  removing both show a toast with Undo; nothing asks "Are you sure?".
+- "Rent" is in the menu (sidebar and bottom bar).
+
+**Task 2 — Dashboard (item 5): done.**
+
+- This month: rent expected, rent received (and what is left), rent owed to
+  owners, and what is left after owners.
+- Late rent: each late tenant with everything they owe across all months,
+  longest overdue first, linking to the month it started.
+- Empty rooms, and whole homes with no tenant.
+- Each home this month: rent, owner rent and what is left.
+- Three queries however many homes there are: the organisation, the homes
+  with their rooms, owner leases and tenants, and the charges with their
+  payments. The sums are in `src/lib/dashboard.ts` with unit tests.
+
+Checks. As on the last two days, none could run in the build environment, so
+they ran in GitHub Actions on `auto/2026-11-17` before `main` was moved. All
+passed on the first run:
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+**What has not been checked.** Like yesterday's tenant code, today's rent and
+dashboard code has passed type checking, lint, unit tests and a production
+build, but it has never run against a real database or in a real browser,
+and nobody has looked at the new screens. Three days of screens are now in
+that state. The isolation tests and the Playwright journey written today
+(`e2e/rent.spec.ts`) are the way to check it: please run `pnpm test:rls` and
+`pnpm test:e2e` locally before relying on any of it.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `sb_publishable_`, `service_role`, API keys, private keys, passwords and
+  JWT-shaped strings). The only matches are code that names the
+  `SUPABASE_SERVICE_ROLE_KEY` variable. `.env.example` gained an empty
+  `CRON_SECRET=` line.
+- No new `NEXT_PUBLIC_` variable. The service-role client
+  (`src/server/service-client.ts`) imports `server-only`, is imported only by
+  the cron route, and no client component imports from `src/server/` except
+  for types. `src/server/service-client.guard.test.ts` keeps it that way.
+- Four new server actions (`src/app/(app)/rent/actions.ts`). Each validates
+  with a shared Zod schema and goes through `runAction` (session check and
+  rate limit); the data functions derive the organisation from memberships,
+  filter by it, and write `audit_log`.
+- One new route handler (the cron route). It has a rate limit and the secret
+  header check, takes no input from the request, and gives each new charge
+  the organisation of its own tenancy. It cannot use a session or a
+  per-organisation scope, because it is the scheduled job for everyone.
+- No raw SQL and no `dangerouslySetInnerHTML`. The one filter built from a
+  string uses two dates made on the server, never text from the browser.
+  The month in the address is checked against a strict pattern before use.
+  Errors shown to people are plain messages; error codes go to the log only.
+- The migration adds one column and one index: no new table, so no new RLS
+  policy is needed, and no existing policy changes.
+- One thing was loosened on purpose: `/api/cron` was added to the paths that
+  `src/lib/supabase/proxy.ts` lets through without a session, because a cron
+  request has none. The route does its own secret check. No RLS policy, auth
+  check on a page or action, rate limit or security header was removed or
+  weakened. `next.config.ts` and the first migration are untouched.
+
+Pending migrations (see `docs/PENDING_MIGRATIONS.md`):
+
+- `20261117030000_payments_removed_at.sql`: adds `payments.removed_at` and an
+  index for the rent page. `database.types.ts` was updated by hand to match.
+- Still waiting from yesterday:
+  `20261116030000_one_current_tenant_per_place.sql`.
+
+Decisions made without asking:
+
+- Rent is charged by calendar month, and `period_start` is the first day of
+  the month. The first month is a full month's rent, not worked out by the
+  day.
+- Rent is due on the due day, but in the move-in month never before the
+  move-in day. It is Late from the day after the due date.
+- Rent that is part paid and past its due date shows as Late, not Part paid,
+  with what has been paid and what is left.
+- "Rent received" means payments against this month's rent, not payments
+  made during this month.
+- Payments together can never be more than the month's rent: a larger "Other
+  amount" is refused with a message. A removed payment cannot be put back if
+  the month has since been paid in full another way.
+- A payment is dated the day it is recorded. There is no date field yet.
+- Payments are removed by setting `removed_at`, never by deleting. That
+  needs today's migration. Until it is applied, reads fall back to a query
+  without the column, the Remove buttons are hidden, and "Mark as paid" has
+  no Undo. This keeps the dashboard and rent page working in the meantime.
+- A charge for a month before the tenant's move-in month is left out unless
+  something was paid towards it. This matters when a move-in date is typed
+  wrong and then corrected: the wrong months would otherwise show as late
+  for ever, because charges are never deleted.
+- The cron job checks every tenant who lives in a home now or moved out in
+  the last two calendar months, and fills in every missing month, not only
+  the newest. It writes one `audit_log` row per organisation that got new
+  charges (with no user, because nobody is signed in).
+- `CRON_SECRET` must be at least 16 characters, or the route treats it as
+  not set. The schedule is 00:05 UTC daily in `vercel.json`, which is just
+  after midnight in London in winter and 01:05 in summer.
+- If making charges fails while a tenant is being saved, the tenant is still
+  saved and the problem is logged; the cron job fills in the months.
+- The rent list and the dashboard lists are one list each that lines up in
+  columns on wide screens, not a separate sortable table. The rent list's
+  order is fixed (late first) and it is paginated (25 per page), so there is
+  nothing for a heading to sort. TanStack Table and Recharts are still
+  unused.
+- The rent page reads the whole month (up to 1,000 charges) in one query and
+  sorts it in the server, because the order depends on a status that is not
+  stored.
+- The dashboard reads every charge that is past its due date, however old,
+  to find unpaid rent. It reads in pages of 1,000 and stops after 5,000 with
+  a warning in the log. A database view with balances would remove this
+  limit; that fits item 11 (performance).
+- The dashboard no longer shows "Signed in as"; it shows the organisation
+  name and the month.
+- `TextField` can now take its own `id`, because the "Other amount" field can
+  be open for more than one tenant at once.
+- No new dependencies.
+
+Needs a human:
+
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Third day running. Without it the run cannot install packages, run any
+  check itself, read the Next.js guides, or open the app in a browser.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally**, and look at the rent
+  page and dashboard at 375, 768 and 1440px. Three days of work have not
+  been run against a database.
+- **Apply the two pending migrations** (review them first).
+- **Set `CRON_SECRET` in Vercel** (Production, and Preview if wanted), then
+  redeploy so the daily job in `vercel.json` can run. Check that
+  `SUPABASE_SERVICE_ROLE_KEY` is set there too. Until then a new month's
+  rent does not appear on its own.
+- **Think about tenants who moved in long ago.** As specified, adding a
+  tenant makes a charge for every month since they moved in, all unpaid. A
+  tenant added with a move-in date two years back shows 24 months as late.
+  If that is not wanted, a later task could ask "rent is paid up to which
+  month?" when adding a tenant. Nothing was built for this.
+- Tenants added before today have no charges yet. The first cron run makes
+  them (back to each move-in month). Or run it once by hand with the `curl`
+  line in the README.
+- Delete the merged branches `auto/2026-11-15`, `auto/2026-11-16` and
+  `auto/2026-11-17` in GitHub (this environment cannot delete branches).
+- Six Dependabot pull requests are open (#1, #2, #3, #5, #6 and #7); review
+  and merge by hand. The grouped minor-and-patch one (#7) passed CI.
+
+### After the push
+
+- `main` is only fast-forwarded to a commit that has already passed every
+  check on `auto/2026-11-17`. The CI run for that same commit on `main` can
+  be seen in GitHub Actions.
+- The `auto/2026-11-17` branch is fully merged once `main` has moved and is
+  **not** a blocked build. The next run should treat it, and the two older
+  `auto/*` branches, as resolved and not count them as a task.

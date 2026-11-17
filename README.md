@@ -8,8 +8,8 @@ Mobile first, plain words, very simple screens. Multi-tenant: each landlord's
 data is isolated by `organisation_id` with Postgres row-level security (RLS) in
 Supabase.
 
-> Status: sign-in, homes and rooms, and tenants are built. Rent tracking and
-> the dashboard come next. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the
+> Status: sign-in, homes and rooms, tenants, rent tracking and the dashboard
+> are built. Overdue reminders come next. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the
 > plan, [`docs/DAILY_LOG.md`](docs/DAILY_LOG.md) for what each daily build did,
 > and [`docs/PENDING_MIGRATIONS.md`](docs/PENDING_MIGRATIONS.md) for database
 > changes waiting to be applied.
@@ -58,6 +58,7 @@ Put real values in `.env.local`, which git ignores. Never commit real keys.
 | `RESEND_API_KEY`                       | Server only                                     | When sending email                    |
 | `UPSTASH_REDIS_REST_URL`               | Server only                                     | Production (skipped locally if unset) |
 | `UPSTASH_REDIS_REST_TOKEN`             | Server only                                     | Production (skipped locally if unset) |
+| `CRON_SECRET`                          | Server only. Secret header for the daily cron   | Production (cron is refused if unset) |
 | `NEXT_PUBLIC_APP_URL`                  | Links and auth redirects                        | Defaults to `http://localhost:3000`   |
 
 How they are checked:
@@ -113,7 +114,8 @@ GitHub Actions.
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/           Sign in (email → code), auth server actions
-│   │   ├── (app)/            Logged-in area: /dashboard, /homes, /tenants (needs a session)
+│   │   ├── (app)/            Logged-in area: /dashboard, /homes, /tenants, /rent (needs a session)
+│   │   ├── api/cron/         Daily cron routes (secret header, no session)
 │   │   ├── auth/confirm/     Handles the sign-in link from the email
 │   │   ├── layout.tsx        Root layout (fonts, toaster)
 │   │   ├── page.tsx          Home page
@@ -136,9 +138,14 @@ GitHub Actions.
 │   │   ├── run-action.ts     Wrapper every server action uses (session, rate limit)
 │   │   ├── homes.ts          Homes and rooms: reads and writes
 │   │   ├── tenants.ts        Tenants: reads and writes
+│   │   ├── rent.ts           Rent: a month's rent, payments
+│   │   ├── rent-charges.ts   Makes rent charges (with a tenant, and daily)
+│   │   ├── dashboard.ts      Dashboard data
+│   │   ├── service-client.ts Service-role client. Cron route ONLY
 │   │   └── env.ts            Secret env validation
 │   └── proxy.ts              Refreshes the Supabase session on each request
 ├── next.config.ts            Security headers, env check
+├── vercel.json               Vercel Cron schedule (daily rent charges)
 ├── playwright.config.ts
 └── vitest.config.mts
 ```
@@ -183,6 +190,58 @@ GitHub Actions.
 - The audit log records what changed for a tenant, but never their name,
   phone number or email.
 
+## Rent
+
+- Rent is charged once per calendar month. Each tenant has one `rent_charges`
+  row per month (`period_start` is the first day of the month), from the
+  month they move in to the month they move out.
+- Charges are made when a tenant is added (move-in month to this month) and
+  by a daily cron job for each new month. Making charges is safe to repeat:
+  a month that already has a charge is skipped, never changed. So a charge
+  keeps the rent it was made with, and a rent change applies to future
+  months only.
+- Rent is due on the tenant's due day. In the month they move in, it is not
+  due before the day they move in. The first month is a full month's rent
+  (nothing is worked out by the day).
+- Status is worked out every time, never stored: **Paid** (payments cover the
+  rent), **Late** (not fully paid and the due date has passed), **Part paid**
+  (something paid, not yet past the due date), **Due** (nothing paid, not yet
+  past the due date). All dates use Europe/London. The rules live in
+  `src/lib/rent.ts` and are unit tested.
+- `/rent` shows one month, late tenants first. "Mark as paid" records
+  whatever is left in one tap. "Other amount" records a part payment. A month
+  can have several payments, but never more than the rent in total.
+- Payments are never deleted. "Remove" sets `payments.removed_at` and "Undo"
+  clears it.
+- The dashboard shows this month's rent expected and received, rent owed to
+  owners, what is left after owners (for all homes and for each home), late
+  rent by tenant (across all months), and empty rooms. It loads in three
+  queries. The sums live in `src/lib/dashboard.ts` and are unit tested.
+
+### Daily cron job
+
+`GET /api/cron/rent-charges` makes this month's charge for every tenant and
+fills in any month that is missing. It is the only code that uses the
+service-role client (a unit test fails if anything else imports it).
+
+To switch it on:
+
+1. Set `CRON_SECRET` in the Vercel project (Settings → Environment Variables)
+   to a long random value, for example the output of `openssl rand -hex 32`.
+   It must be at least 16 characters.
+2. Deploy. `vercel.json` schedules the job for 00:05 UTC every day, just
+   after midnight in London all year. Vercel sends the secret itself as
+   `Authorization: Bearer <CRON_SECRET>`.
+
+Without the secret the route answers 401 and does nothing. To run it by hand:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/rent-charges
+```
+
+Until the job is switched on, tenants still get their charges when they are
+added, but a new month's rent will not appear on its own.
+
 ## Data model and security
 
 - Every business table has `organisation_id`. A user sees a row only if they
@@ -193,8 +252,8 @@ GitHub Actions.
 - Signing up creates an organisation ("My organisation") with the new user as
   its owner. An organisation always keeps at least one owner.
 - Money is stored as whole pence (`integer`), never as decimals.
-- The service role key bypasses RLS. It is only used in `src/server/` and in
-  the RLS test setup.
+- The service role key bypasses RLS. It is only used by the daily cron route
+  (through `src/server/service-client.ts`) and in test setup.
 
 ## Sign in
 

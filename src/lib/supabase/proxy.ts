@@ -4,8 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { getPublicEnv, hasSupabaseEnv } from "@/lib/env";
 
-/** Paths anyone can open without logging in. Everything else needs a session. */
-const PUBLIC_PATHS = ["/", "/sign-in", "/auth"];
+/**
+ * Paths anyone can open without logging in. Everything else needs a session.
+ * "/api/cron" has no session by design: each cron route checks a secret
+ * header itself (see src/lib/cron-secret.ts) and refuses everything else.
+ */
+const PUBLIC_PATHS = ["/", "/sign-in", "/auth", "/api/cron"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(

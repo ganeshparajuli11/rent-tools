@@ -33,6 +33,9 @@ export const serverEnvSchema = z
     RESEND_API_KEY: z.string().min(1).optional(),
     UPSTASH_REDIS_REST_URL: z.url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+    // Secret header for the daily cron route. Without it the route refuses
+    // every request (see src/lib/cron-secret.ts).
+    CRON_SECRET: z.string().min(1).optional(),
   })
   .refine(
     (env) =>

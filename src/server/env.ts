@@ -9,7 +9,7 @@ import {
 
 /**
  * Secret, server-only environment variables (service role key, Resend,
- * Upstash). This is the only place that reads them. The "server-only" import
+ * Upstash, the cron secret). This is the only place that reads them. The "server-only" import
  * makes the build fail if a Client Component ever imports this file.
  */
 let cachedServerEnv: ServerEnv | undefined;
@@ -25,6 +25,7 @@ export function getServerEnv(): ServerEnv {
     RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || undefined,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || undefined,
+    CRON_SECRET: process.env.CRON_SECRET || undefined,
   };
 
   if (isEnvValidationSkipped) {

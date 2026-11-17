@@ -10,6 +10,7 @@ import {
   UserFacingError,
   writeAudit,
 } from "./context";
+import { ensureRentCharges, type TenancyForCharges } from "./rent-charges";
 
 /**
  * Tenants (database: tenancies).
@@ -25,6 +26,10 @@ import {
  * Rent changes only ever change `tenancies.rent_pence`. Charges for months
  * already created (`rent_charges`) keep the amount they were made with, so a
  * change affects future months only.
+ *
+ * Adding a tenant makes their rent charges from the month they moved in to
+ * this month. The daily cron job makes each new month's charge after that,
+ * and fills in anything that was missed.
  *
  * The audit log records what changed but not names, phone numbers or email
  * addresses, so a tenant's personal data lives in one place only.
@@ -56,6 +61,23 @@ function isUniqueViolation(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === UNIQUE_VIOLATION
   );
+}
+
+/**
+ * Makes this tenant's rent charges up to this month (existing ones are left
+ * alone). If it fails, the tenant is still saved: the problem is logged and
+ * the daily cron job fills in the missing months.
+ */
+async function makeRentCharges(ctx: Ctx, tenancy: TenancyForCharges) {
+  try {
+    await ensureRentCharges(ctx.supabase, [tenancy], todayInLondon());
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    console.error("[tenants] making rent charges failed", { code });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +215,16 @@ export async function createTenant(
     throw insertError;
   }
 
+  // Rent from the month they moved in to this month.
+  await makeRentCharges(ctx, {
+    id: tenancy.id,
+    organisation_id: organisationId,
+    rent_pence: values.rentPence,
+    due_day: values.dueDay,
+    start_date: values.startDate,
+    end_date: null,
+  });
+
   await writeAudit(ctx, {
     organisationId,
     action: "tenant.created",
@@ -251,6 +283,16 @@ export async function updateTenant(ctx: Ctx, id: string, values: TenantValues) {
     .select("id");
   if (error) throw error;
   if (!updated.length) throw new UserFacingError(NOT_FOUND);
+
+  // An earlier move-in date can mean earlier months now need a charge.
+  await makeRentCharges(ctx, {
+    id,
+    organisation_id: organisationId,
+    rent_pence: values.rentPence,
+    due_day: values.dueDay,
+    start_date: values.startDate,
+    end_date: before.end_date,
+  });
 
   const contactChanged = [
     before.tenant_name !== values.name ? "name" : null,
@@ -330,7 +372,9 @@ export async function undoMoveTenantOut(ctx: Ctx, id: string) {
 
   const { data: before, error: readError } = await ctx.supabase
     .from("tenancies")
-    .select("tenant_name, property_id, room_id, end_date")
+    .select(
+      "tenant_name, property_id, room_id, rent_pence, due_day, start_date, end_date",
+    )
     .eq("id", id)
     .eq("organisation_id", organisationId)
     .maybeSingle();
@@ -369,6 +413,16 @@ export async function undoMoveTenantOut(ctx: Ctx, id: string) {
     throw error;
   }
   if (!data.length) throw new UserFacingError(NOT_FOUND);
+
+  // They are a tenant again, so months since they "moved out" need a charge.
+  await makeRentCharges(ctx, {
+    id,
+    organisation_id: organisationId,
+    rent_pence: before.rent_pence,
+    due_day: before.due_day,
+    start_date: before.start_date,
+    end_date: null,
+  });
 
   await writeAudit(ctx, {
     organisationId,

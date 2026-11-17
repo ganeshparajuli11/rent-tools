@@ -181,6 +181,7 @@ export type Database = {
           organisation_id: string;
           paid_on: string;
           recorded_by: string | null;
+          removed_at: string | null;
           rent_charge_id: string;
           updated_at: string;
         };
@@ -193,6 +194,7 @@ export type Database = {
           organisation_id: string;
           paid_on?: string;
           recorded_by?: string | null;
+          removed_at?: string | null;
           rent_charge_id: string;
           updated_at?: string;
         };
@@ -205,6 +207,7 @@ export type Database = {
           organisation_id?: string;
           paid_on?: string;
           recorded_by?: string | null;
+          removed_at?: string | null;
           rent_charge_id?: string;
           updated_at?: string;
         };

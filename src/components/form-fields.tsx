@@ -64,9 +64,11 @@ export function TextField<T extends FieldValues>({
   label,
   hint,
   className,
+  id: idProp,
   ...inputProps
 }: BaseProps<T> & Omit<React.ComponentProps<"input">, "name" | "form">) {
-  const id = `field-${name}`;
+  // Pass `id` when the same field can be on the page more than once.
+  const id = idProp ?? `field-${name}`;
   const error = errorOf(form, name);
   return (
     <Field data-invalid={error ? true : undefined} className={className}>

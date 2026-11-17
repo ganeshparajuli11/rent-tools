@@ -23,6 +23,9 @@ function refresh(homeId: string, tenantId?: string) {
   revalidatePath("/homes");
   revalidatePath(`/homes/${homeId}`);
   if (tenantId) revalidatePath(`/tenants/${tenantId}`);
+  // Tenants change what the rent page and the dashboard show.
+  revalidatePath("/rent");
+  revalidatePath("/dashboard");
 }
 
 export async function createTenantAction(

@@ -298,3 +298,69 @@ Needs a human:
 - The `auto/2026-11-16` branch is fully merged and is **not** a blocked build.
   It could not be deleted from here; the next run should treat it, and
   `auto/2026-11-15`, as resolved and not count them as a task.
+
+## 2026-11-17
+
+### Start of run
+
+- Latest CI run on `main` (commit `2f664ca`): passed. Nothing to fix.
+- No open "Daily build blocked" issue. The branches `auto/2026-11-15` and
+  `auto/2026-11-16` still exist, but the earlier logs say both are fully
+  merged and are not blocked builds (both are ancestors of `main`), so they
+  were not counted as a task.
+- **Environment problem, third day:** `pnpm install --frozen-lockfile` cannot
+  run. `registry.npmjs.org` does not resolve from this environment (it is on
+  the environment's direct-access list, but there is no route to it). It was
+  not retried or worked around. There is no `node_modules`, so the checks
+  cannot run here and the Next.js guides in `node_modules/next/dist/docs/`
+  cannot be read.
+- Decision: same approach as yesterday. Work goes to `auto/2026-11-17`, where
+  the CI workflow runs every Step 5 check. `main` only moves forward to a
+  commit that has passed all of them. New code uses only Next.js APIs the
+  existing code already uses.
+- New today: the environment does have its own copies of Prettier and
+  Tailwind CSS 4.3.3, so formatting and Tailwind class order were checked
+  here before pushing, and the new date, status and dashboard helpers were
+  run here with a small stand-in for the test runner. Type checking, lint,
+  the real unit test run and the build still only happen in GitHub Actions.
+
+### Plan
+
+**Task 1 — Rent ledger (backlog item 4)**
+
+- Scope: one `rent_charges` row per tenant per calendar month, made when a
+  tenant is added (move-in month to this month) and by a daily cron route
+  that can be run any number of times. Status (Paid, Part paid, Due, Late) is
+  worked out from the charge, its payments and today's date in London; it is
+  never stored. A `/rent` page by month with late tenants first, one-tap
+  "Mark as paid" with Undo, an "Other amount" form, several payments per
+  month, and payment removal with Undo.
+- Files: `src/lib/rent.ts` (date and status helpers),
+  `src/lib/validation/rent.ts`, `src/server/rent.ts`,
+  `src/server/rent-charges.ts`, `src/server/service-client.ts`,
+  `src/app/api/cron/rent-charges/route.ts`, `src/app/(app)/rent/**`,
+  `src/components/rent/**`, the menu, `src/server/tenants.ts`,
+  `src/server/run-action.ts`, `src/lib/env.ts`, `src/server/env.ts`,
+  `src/lib/supabase/proxy.ts`, `vercel.json`, a migration for
+  `payments.removed_at`, `database.types.ts`, `.env.example`.
+- Tests: unit tests for months, due dates, charge months, status and sorting,
+  the cron secret check and the amount schema; isolation cases for the rent
+  data functions; a Playwright journey at phone and desktop widths.
+- Risks: none of the database code can run here. Removing a payment needs a
+  new column (payments are never deleted), so the code must still load
+  before that migration is applied. The cron route needs a secret and a
+  schedule set up by the owner. The service-role client appears in app code
+  for the first time, so it must stay in server-only code and be used by the
+  cron route only.
+
+**Task 2 — Dashboard (backlog item 5)**
+
+- Scope: this month's rent expected and received, rent owed to owners,
+  margin per home, overdue tenants, and empty rooms.
+- Files: `src/lib/dashboard.ts` (pure sums), `src/server/dashboard.ts`,
+  `src/app/(app)/dashboard/page.tsx`, loading and error screens.
+- Tests: unit tests for the sums; the Playwright rent journey checks the
+  dashboard figures; an isolation case for the dashboard data.
+- Risks: "overdue" needs every unpaid month, however old, so the charges
+  query can grow with history. It is read in pages with a hard stop; a
+  database view with balances is the long-term answer (item 11).

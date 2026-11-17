@@ -23,8 +23,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
 import type { UpdateHomeValues } from "@/lib/validation/homes";
 import type { TenantValues } from "@/lib/validation/tenants";
+import { todayInLondon } from "@/lib/dates";
+import { addMonths, monthOf, monthStart } from "@/lib/rent";
 import { type Ctx, UserFacingError } from "@/server/context";
+import { getDashboard } from "@/server/dashboard";
 import * as homes from "@/server/homes";
+import * as rent from "@/server/rent";
+import { generateAllRentCharges } from "@/server/rent-charges";
 import * as tenants from "@/server/tenants";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -754,5 +759,239 @@ describe("tenants server actions: user A cannot touch user B's tenants", () => {
     const logged = JSON.stringify(audit);
     expect(logged).not.toContain("Amira");
     expect(logged).not.toContain("amira@example.com");
+  });
+});
+
+/**
+ * The rent server actions are thin wrappers around these data functions,
+ * like homes and tenants. Each user already has one rent charge with one
+ * payment (created in createSignedInUser).
+ */
+describe("rent server actions: user A cannot touch user B's rent or payments", () => {
+  const ctxOf = (user: TestUser): Ctx => ({
+    supabase: user.client as unknown as SupabaseClient<Database>,
+    userId: user.userId,
+  });
+
+  const today = todayInLondon();
+  const thisMonth = monthOf(today);
+  const lastMonth = addMonths(thisMonth, -1);
+
+  async function snapshotB() {
+    const { data: charges } = await admin
+      .from("rent_charges")
+      .select("id, amount_pence, due_date")
+      .eq("organisation_id", b.orgId)
+      .order("id");
+    const { data: payments } = await admin
+      .from("payments")
+      .select("*")
+      .eq("organisation_id", b.orgId)
+      .order("id");
+    return { charges, payments };
+  }
+
+  it("cannot record a payment on B's rent, or remove or put back B's payment", async () => {
+    const before = await snapshotB();
+    const ctx = ctxOf(a);
+
+    const attempts: [string, () => Promise<unknown>][] = [
+      ["markPaid", () => rent.recordPayment(ctx, b.ids.rent_charges, "rest")],
+      ["otherAmount", () => rent.recordPayment(ctx, b.ids.rent_charges, 100)],
+      ["removePayment", () => rent.removePayment(ctx, b.ids.payments)],
+      ["restorePayment", () => rent.restorePayment(ctx, b.ids.payments)],
+    ];
+    for (const [name, attempt] of attempts) {
+      await expect(attempt(), name).rejects.toBeInstanceOf(UserFacingError);
+    }
+
+    expect(await snapshotB()).toEqual(before);
+  });
+
+  it("the daily job run as A only makes A's charges, and a second run makes none", async () => {
+    // The real job uses the service-role client. Run with A's own session,
+    // RLS keeps it inside A's organisation, which is what this checks.
+    const before = await snapshotB();
+    const db = a.client as unknown as SupabaseClient<Database>;
+
+    await generateAllRentCharges(db);
+    const second = await generateAllRentCharges(db);
+    expect(second.chargesCreated).toBe(0);
+    expect(second.today).toBe(today);
+
+    expect(await snapshotB()).toEqual(before);
+
+    // A's tenant (moved in on 5 January 2026) now has this month's charge.
+    const { data: mine } = await a.client
+      .from("rent_charges")
+      .select("period_start, due_date, amount_pence")
+      .eq("tenancy_id", a.ids.tenancies)
+      .eq("period_start", monthStart(thisMonth));
+    expect(mine).toHaveLength(1);
+    expect(mine?.[0]?.amount_pence).toBe(55_000);
+  });
+
+  it("A's rent page and dashboard never show B's tenants", async () => {
+    const page = await rent.getRentMonth(
+      ctxOf(a),
+      { month: thisMonth, page: 1 },
+      today,
+    );
+    expect(page.rows.map((r) => r.tenantName)).toContain("Tenant A");
+    expect(page.rows.map((r) => r.tenantName)).not.toContain("Tenant B");
+
+    const dashboard = await getDashboard(ctxOf(a), today);
+    const homeIds = dashboard?.summary.homes.map((h) => h.id) ?? [];
+    expect(homeIds).toContain(a.ids.properties);
+    expect(homeIds).not.toContain(b.ids.properties);
+    expect(JSON.stringify(dashboard)).not.toContain("Tenant B");
+  });
+
+  it("still works on A's own rent: charges, part payments, paid, remove and undo (positive control)", async () => {
+    const ctx = ctxOf(a);
+    const created = await homes.createHome(ctx, {
+      name: `Rent ${runId}`,
+      addressLine1: "4 Test Road",
+      addressLine2: null,
+      city: null,
+      postcode: "LS6 1AA",
+      letType: "whole_home",
+      roomCount: null,
+      owner: { name: "Owner", phone: null, rentPence: 40_000, dueDay: 1 },
+    });
+    const values: TenantValues = {
+      name: "Rent Payer",
+      phone: null,
+      email: null,
+      rentPence: 60_000,
+      dueDay: 1,
+      // Moved in on the first day of last month: two months of rent.
+      startDate: monthStart(lastMonth),
+      depositPence: 0,
+    };
+    const tenant = await tenants.createTenant(
+      ctx,
+      { homeId: created.id, roomId: null },
+      values,
+    );
+
+    const chargesOf = async () => {
+      const { data } = await a.client
+        .from("rent_charges")
+        .select("id, period_start, due_date, amount_pence")
+        .eq("tenancy_id", tenant.id)
+        .order("period_start");
+      return data ?? [];
+    };
+
+    // One charge per month from move-in to now, made with the tenant.
+    const charges = await chargesOf();
+    expect(charges.map((c) => c.period_start)).toEqual([
+      monthStart(lastMonth),
+      monthStart(thisMonth),
+    ]);
+    expect(charges.map((c) => c.amount_pence)).toEqual([60_000, 60_000]);
+
+    // A rent change makes no new charges and leaves old amounts alone.
+    await tenants.updateTenant(ctx, tenant.id, {
+      ...values,
+      rentPence: 65_000,
+    });
+    expect(await chargesOf()).toEqual(charges);
+
+    const rowFor = async (month: string) => {
+      const page = await rent.getRentMonth(ctx, { month, page: 1 }, today);
+      return {
+        page,
+        row: page.rows.find((r) => r.tenantId === tenant.id),
+      };
+    };
+
+    // Last month's rent was due on the 1st of last month, so it is late.
+    const first = await rowFor(lastMonth);
+    const { page } = first;
+    let row = first.row;
+    expect(row?.status).toBe("late");
+    expect(row?.amountPence).toBe(60_000);
+    expect(row?.owedPence).toBe(60_000);
+    const chargeId = row!.chargeId;
+
+    // Part payment: still late, with the rest left to pay.
+    const part = await rent.recordPayment(ctx, chargeId, 20_000);
+    ({ row } = await rowFor(lastMonth));
+    expect(row?.status).toBe("late");
+    expect(row?.paidPence).toBe(20_000);
+    expect(row?.owedPence).toBe(40_000);
+
+    // More than is left is refused; so is nothing.
+    await expect(
+      rent.recordPayment(ctx, chargeId, 40_001),
+    ).rejects.toBeInstanceOf(UserFacingError);
+    await expect(rent.recordPayment(ctx, chargeId, 0)).rejects.toBeInstanceOf(
+      UserFacingError,
+    );
+
+    // "Mark as paid" records what is left.
+    const rest = await rent.recordPayment(ctx, chargeId, "rest");
+    expect(rest.amountPence).toBe(40_000);
+    ({ row } = await rowFor(lastMonth));
+    expect(row?.status).toBe("paid");
+    expect(row?.payments.map((p) => p.amountPence).sort()).toEqual([
+      20_000, 40_000,
+    ]);
+    await expect(
+      rent.recordPayment(ctx, chargeId, "rest"),
+    ).rejects.toBeInstanceOf(UserFacingError);
+
+    // Removing and putting back needs the payments.removed_at migration.
+    if (page.canRemovePayments) {
+      await rent.removePayment(ctx, rest.paymentId);
+      ({ row } = await rowFor(lastMonth));
+      expect(row?.status).toBe("late");
+      expect(row?.paidPence).toBe(20_000);
+      // Removing it twice finds nothing to remove.
+      await expect(
+        rent.removePayment(ctx, rest.paymentId),
+      ).rejects.toBeInstanceOf(UserFacingError);
+
+      await rent.restorePayment(ctx, rest.paymentId);
+      ({ row } = await rowFor(lastMonth));
+      expect(row?.status).toBe("paid");
+
+      // A removed payment cannot come back once the month is paid another way.
+      await rent.removePayment(ctx, part.paymentId);
+      await rent.recordPayment(ctx, chargeId, "rest");
+      await expect(
+        rent.restorePayment(ctx, part.paymentId),
+      ).rejects.toBeInstanceOf(UserFacingError);
+      ({ row } = await rowFor(lastMonth));
+      expect(row?.status).toBe("paid");
+      expect(row?.paidPence).toBe(60_000);
+
+      // The removed payment is still in the database, marked as removed.
+      const { data: kept } = await a.client
+        .from("payments")
+        .select("id, removed_at")
+        .eq("id", part.paymentId)
+        .single();
+      expect(kept?.removed_at).not.toBeNull();
+    }
+
+    // The dashboard counts this month's rent and the owner's rent.
+    const dashboard = await getDashboard(ctx, today);
+    const home = dashboard?.summary.homes.find((h) => h.id === created.id);
+    expect(home?.expectedPence).toBe(60_000);
+    expect(home?.ownerRentPence).toBe(40_000);
+    expect(home?.marginPence).toBe(20_000);
+
+    // Payments left audit rows, with no tenant name in them.
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("action, changes")
+      .eq("table_name", "payments");
+    expect(audit?.map((r) => r.action)).toEqual(
+      expect.arrayContaining(["payment.recorded"]),
+    );
+    expect(JSON.stringify(audit)).not.toContain("Rent Payer");
   });
 });

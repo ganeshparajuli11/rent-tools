@@ -95,18 +95,21 @@ export type Database = {
           created_at: string;
           id: string;
           name: string;
+          overdue_email_enabled: boolean;
           updated_at: string;
         };
         Insert: {
           created_at?: string;
           id?: string;
           name: string;
+          overdue_email_enabled?: boolean;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
           id?: string;
           name?: string;
+          overdue_email_enabled?: boolean;
           updated_at?: string;
         };
         Relationships: [];

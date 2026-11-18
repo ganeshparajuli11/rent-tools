@@ -56,6 +56,7 @@ Put real values in `.env.local`, which git ignores. Never commit real keys.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server (replaces the legacy anon key)     | Yes                                   |
 | `SUPABASE_SERVICE_ROLE_KEY`            | Server only. Bypasses RLS                           | Yes, when server code uses it         |
 | `RESEND_API_KEY`                       | Server only                                         | When sending email                    |
+| `EMAIL_FROM`                           | Server only. Sender on a domain verified in Resend  | When sending email                    |
 | `UPSTASH_REDIS_REST_URL`               | Server only                                         | Production (skipped locally if unset) |
 | `UPSTASH_REDIS_REST_TOKEN`             | Server only                                         | Production (skipped locally if unset) |
 | `CRON_SECRET`                          | Server only. Secret header for the daily cron       | Production (cron is refused if unset) |
@@ -243,6 +244,29 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/rent-c
 Until the job is switched on, tenants still get their charges when they are
 added, but a new month's rent will not appear on its own.
 
+### Late rent email
+
+`GET /api/cron/overdue-reminders` emails each organisation's owners a list of
+late rent (who, where, how much, since when) once a day, at 08:05 UTC. It
+uses the same sums as the dashboard. Owners can turn it off on the Settings
+page (`organisations.overdue_email_enabled`, on by default).
+
+- It sends nothing unless `RESEND_API_KEY` and `EMAIL_FROM` are both set
+  (the route answers `{ ok: true, skipped: "email-not-configured" }`), and
+  nothing until the `overdue_email_enabled` migration is applied.
+- At most one email per organisation per London day: each email sent writes
+  an `audit_log` row (`overdue_digest.sent`) that is checked first, and
+  Resend gets an idempotency key made from the organisation and the day.
+- It is protected by the same `CRON_SECRET` header as the rent-charges job.
+
+To switch it on: verify a sending domain in Resend, set `RESEND_API_KEY` and
+`EMAIL_FROM` (for example `RentDesk <reminders@your-domain>`) in Vercel, and
+deploy. To run it by hand:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/overdue-reminders
+```
+
 ## Photos
 
 - Each home can have up to 20 photos (JPG, PNG or WebP, 5 MB each). They are
@@ -280,8 +304,16 @@ it again to reset it. It only ever touches the demo account.
 - Signing up creates an organisation ("My organisation") with the new user as
   its owner. An organisation always keeps at least one owner.
 - Money is stored as whole pence (`integer`), never as decimals.
-- The service role key bypasses RLS. It is only used by the daily cron route
-  (through `src/server/service-client.ts`) and in test setup.
+- The service role key bypasses RLS. It is only used by the daily cron
+  routes (through `src/server/service-client.ts`) and in test setup.
+- Every response has a Content-Security-Policy and the other security
+  headers from `src/lib/security-headers.ts` (tested). Scripts may only come
+  from this site; inline scripts are still allowed, because Next.js and the
+  theme switcher use them.
+- `src/server/server-actions.guard.test.ts` reads every server action and
+  route handler and fails if one skips Zod validation, `runAction` (session
+  and rate limit), the organisation check, the `audit_log` write, or (for
+  routes) the rate limiter and cron secret.
 
 ## Sign in
 

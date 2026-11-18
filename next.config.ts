@@ -5,30 +5,7 @@ import {
 } from "next/constants";
 
 import { getPublicEnv } from "./src/lib/env";
-
-/**
- * Baseline security headers for every route.
- *
- * TODO(security): add a Content-Security-Policy. It needs nonces or hashes for
- * Next.js inline scripts, plus connect-src for the Supabase URL. See
- * node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md
- */
-const securityHeaders = [
-  {
-    // Force HTTPS for 2 years, including subdomains.
-    key: "Strict-Transport-Security",
-    value: "max-age=63072000; includeSubDomains; preload",
-  },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // Block the app from being shown inside iframes (clickjacking).
-  { key: "X-Frame-Options", value: "DENY" },
-  {
-    key: "Permissions-Policy",
-    value:
-      "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
-  },
-];
+import { securityHeaders } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -41,8 +18,18 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // Security headers, including the Content-Security-Policy, on every
+  // route. See src/lib/security-headers.ts (and its tests).
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeaders({
+          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+          isDevelopment: process.env.NODE_ENV === "development",
+        }),
+      },
+    ];
   },
 };
 

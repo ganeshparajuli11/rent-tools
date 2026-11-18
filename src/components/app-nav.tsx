@@ -1,6 +1,11 @@
 "use client";
 
-import { Building2Icon, LayoutGridIcon, PoundSterlingIcon } from "lucide-react";
+import {
+  Building2Icon,
+  LayoutGridIcon,
+  PoundSterlingIcon,
+  SettingsIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,6 +15,7 @@ const LINKS = [
   { href: "/dashboard", label: "Home", icon: LayoutGridIcon },
   { href: "/homes", label: "Homes", icon: Building2Icon },
   { href: "/rent", label: "Rent", icon: PoundSterlingIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -24,7 +30,7 @@ export function BottomNav() {
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      <ul className="grid grid-cols-3">
+      <ul className="grid grid-cols-4">
         {LINKS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (

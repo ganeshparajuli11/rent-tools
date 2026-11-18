@@ -608,3 +608,160 @@ Needs a human:
   (no nonces, which would also force every page to render per request) and
   locks down everything else. A nonce-based script policy is a follow-up
   once it can be tested in a real browser.
+
+### Result
+
+**Blocked: not pushed to `main`.** Both tasks are built and pass every check
+except `pnpm audit`, which now fails on a new advisory in a package this
+work did not touch (details below). The work is on `auto/2026-11-18` and
+both roadmap items are left unticked, as the rules say. Issue: "Daily build
+blocked: 2026-11-18".
+
+**Task 1 — Overdue reminders (item 6): built, blocked only by the audit.**
+
+- `GET /api/cron/overdue-reminders` (08:05 UTC daily in `vercel.json`, so
+  08:05 in London in winter and 09:05 in summer) emails each organisation's
+  owners a list of late rent: each late tenant, their home or room, what
+  they owe and since when, a total, and links to the dashboard, the rent
+  page and Settings. "Late" uses the same queries and sums as the dashboard.
+- Same protection as the rent-charges job: rate limit, then the
+  `CRON_SECRET` header. Nothing is read or sent when `RESEND_API_KEY` or the
+  new `EMAIL_FROM` is missing (it answers `skipped: "email-not-configured"`),
+  or before today's migration is applied (it cannot tell who turned the
+  email off, so it sends nothing).
+- At most one email per organisation per London day: a sent email writes an
+  `overdue_digest.sent` row to `audit_log` (amounts and counts only), which
+  is checked first, and Resend gets the idempotency key
+  `overdue-digest/<organisation>/<day>`.
+- A new Settings page (in the menu on phones and desktops) has one switch,
+  "Email me about late rent", with Undo in the toast. Only owners can change
+  it; staff see why not. The change is validated, rate limited, scoped to
+  the organisation on the server and written to `audit_log`.
+- The email text is built by `src/lib/overdue-digest.ts`, with unit tests:
+  totals, singular and plural, at most 50 tenants listed, names never in the
+  subject, and every name escaped in the HTML.
+
+**Task 2 — Security hardening (item 7): built, blocked only by the audit.**
+
+- Every response now has a Content-Security-Policy (`src/lib/security-headers.ts`):
+  only this site by default; scripts only from this site; no plugins,
+  framing, other base URLs or posting forms elsewhere; connections only to
+  this site and the Supabase project; `upgrade-insecure-requests` in
+  production. Inline scripts are still allowed (see decisions). Also added
+  `Cross-Origin-Opener-Policy: same-origin`. Every earlier header is kept
+  with the same value, and a test checks that.
+- `src/server/server-actions.guard.test.ts` reads the source and fails if a
+  server action skips Zod, skips `runAction` (session and rate limit), or
+  calls a data function that does not derive the organisation and write
+  `audit_log`; if a new sign-in action appears without review; or if a
+  route handler has no rate limit, or a cron route touches the service-role
+  client before the secret check. It was checked by breaking the rules on
+  purpose: it fails as it should.
+- The check found one gap: the sign-in link route (`/auth/confirm`) had no
+  rate limit. It now has one (20 per 15 minutes per IP address).
+
+Checks (none can run here; all ran in GitHub Actions on `auto/2026-11-18`):
+
+| Check                              | Result                                                    |
+| ---------------------------------- | --------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)                                   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)                                   |
+| `pnpm lint`                        | Passed after one fix (a variable named `module`)          |
+| `pnpm format:check`                | Passed after fixes (see below)                            |
+| `pnpm test`                        | Passed (GitHub Actions)                                   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)                                   |
+| `pnpm audit --audit-level=high`    | **Failed**: GHSA-fc5q-39xc-vjpf in `picomatch`, see below |
+| `pnpm test:rls`                    | Not run here, run locally                                 |
+| `pnpm test:e2e`                    | Not run here, run locally                                 |
+
+The audit failure: a new high-severity advisory, "picomatch vulnerable to
+ReDoS through single-branch repeated extglobs" (GHSA-fc5q-39xc-vjpf),
+affects every `picomatch` up to 4.0.7 and has **no patched version**. It
+comes in through 55 paths, for example `shadcn > fast-glob > micromatch >
+picomatch`. It is not caused by today's changes, and `main` will fail the
+same check on its next run. It cannot be fixed by an update, and ignoring it
+would weaken a security check, so that decision is left to a person (see
+"Needs a human").
+
+The format failures: the local Prettier is 3.8 and CI uses 3.10. One
+construct was formatted differently (a multi-line union type in
+`src/lib/overdue-digest.ts`). A probe branch with the file cut into pieces
+found it; it is now written as a constant list. The probe branch
+`auto/2026-11-18-format-probe` could not be deleted from here.
+
+Local stand-ins: the new and changed unit tests (digest, settings schema,
+security headers, both guard tests, dashboard) were run here with a small
+stand-in for Vitest; Prettier 3.8 and Tailwind 4.3.3's own class sorter
+were run on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `sb_publishable_` values, `service_role`, Resend-style `re_` keys, private
+  keys and JWT-shaped strings). `.env.example` gained an empty `EMAIL_FROM=`.
+- No new `NEXT_PUBLIC_` variable. `RESEND_API_KEY` and `EMAIL_FROM` are read
+  only in `src/server/env.ts`; the email code imports `server-only`. The
+  service-role client is imported by the two cron routes only (the guard
+  test lists both).
+- One new server action (`setOverdueEmailAction`): Zod, `runAction`
+  (session and rate limit), organisation from memberships, owner check,
+  `audit_log`. One new route handler (the email cron): rate limit and secret
+  header before anything else; it takes no input from the request.
+- No raw SQL, no `dangerouslySetInnerHTML`. Email HTML escapes every value
+  typed by users; names never go in the subject. Errors shown to people are
+  plain; logs carry error codes only, never addresses or names.
+- The migration adds one column, no table, and changes no policy or grant.
+- Nothing was weakened: one rate limit was added (`/auth/confirm`), and
+  every existing header is kept. `form-action 'self'` and `frame-ancestors
+'none'` are new restrictions.
+
+Pending migrations (see `docs/PENDING_MIGRATIONS.md`):
+
+- New: `20261118030000_overdue_email_setting.sql` adds
+  `organisations.overdue_email_enabled` (default on). `database.types.ts`
+  was updated by hand.
+- Still waiting: `20261116030000_one_current_tenant_per_place.sql` and
+  `20261117030000_payments_removed_at.sql`.
+
+Decisions made without asking:
+
+- The email is one per organisation, sent to every owner together (not to
+  staff). The switch is per organisation, on by default, and only owners
+  can change it.
+- It is sent at 08:05 UTC, and only when something is late. An organisation
+  with no late rent gets nothing.
+- Resend is called through the `resend` package, which was already a
+  dependency. No new dependencies.
+- A new optional `EMAIL_FROM` variable, because Resend needs a sender on a
+  verified domain. Without it nothing is sent.
+- The CSP allows inline scripts (`'unsafe-inline'`) instead of using nonces.
+  Nonces would make every page render on each request and need testing in a
+  real browser, which this environment cannot do. Everything else in the
+  policy is strict. On Vercel preview deployments the Vercel toolbar may be
+  blocked by the policy; production is not affected.
+- The dashboard's home and charge reads were split out so the daily job can
+  use them with its own client. Nothing about the dashboard changed.
+
+Needs a human:
+
+- **Decide about GHSA-fc5q-39xc-vjpf (picomatch), which blocks every build.**
+  There is no fixed version. picomatch is only used by build and developer
+  tools here (globbing file paths), never on text from users, so the risk to
+  the running app looks low. If you agree, add this to
+  `pnpm-workspace.yaml` with a comment and a date to look again:
+  `auditConfig: { ignoreGhsas: [GHSA-fc5q-39xc-vjpf] }`. Then merge
+  `auto/2026-11-18` into `main` (it passed every other check) and tick items
+  6 and 7 in `docs/ROADMAP.md`. Or wait for a patched picomatch.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Fourth day. It is why Prettier differences cost several CI rounds today.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally**, and look at the new
+  Settings page at 375, 768 and 1440px. Also open the app once in a browser
+  with the new CSP and check the console for blocked items.
+- **Apply the three pending migrations** (review them first).
+- **To switch the email on:** verify a sending domain in Resend; set
+  `RESEND_API_KEY` and `EMAIL_FROM` (for example
+  `RentDesk <reminders@your-domain>`) in Vercel; make sure `CRON_SECRET` is
+  set; redeploy. Then send yourself one by hand with the `curl` line in the
+  README and check how it looks on a phone.
+- Delete the merged branches `auto/2026-11-15`, `auto/2026-11-16` and
+  `auto/2026-11-17`, and the probe branch `auto/2026-11-18-format-probe`.

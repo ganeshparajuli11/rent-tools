@@ -157,9 +157,9 @@ describe("server actions", () => {
           0,
         );
         for (const [, alias, fn] of calls) {
-          const module = byPath.get(modules.get(alias!)!);
-          expect(module, `${alias}`).toBeDefined();
-          const dataBody = functionBody(module!.text, fn!) ?? "";
+          const dataFile = byPath.get(modules.get(alias!)!);
+          expect(dataFile, `${alias}`).toBeDefined();
+          const dataBody = functionBody(dataFile!.text, fn!) ?? "";
           expect(dataBody, `${alias}.${fn}`).toMatch(
             /getOrganisationId\(ctx\)/,
           );

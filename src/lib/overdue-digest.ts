@@ -18,14 +18,17 @@ export type OverdueDigest = {
   html: string;
 };
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
 /** Makes text safe inside HTML. Tenant and home names are typed by users. */
 export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 }
 
 /** "https://app.example.com/" + "/rent" -> "https://app.example.com/rent". */
@@ -39,17 +42,18 @@ function tenantsOwe(count: number): string {
 
 /** "Room 1, 7 Elm Street", or just the home for a whole-home tenant. */
 function placeOf(tenant: OverdueTenant): string {
-  return tenant.roomName
-    ? `${tenant.roomName}, ${tenant.homeName}`
-    : tenant.homeName;
+  if (!tenant.roomName) return tenant.homeName;
+  return `${tenant.roomName}, ${tenant.homeName}`;
 }
 
-function lineOf(tenant: OverdueTenant): {
+type DigestLine = {
   name: string;
   place: string;
   owed: string;
   since: string;
-} {
+};
+
+function lineOf(tenant: OverdueTenant): DigestLine {
   return {
     name: tenant.name,
     place: placeOf(tenant),
@@ -77,8 +81,6 @@ function htmlLink(href: string, label: string): string {
   const safeLabel = escapeHtml(label);
   return `<a href="${safeHref}" style="color:#1d4ed8">${safeLabel}</a>`;
 }
-
-type DigestLine = ReturnType<typeof lineOf>;
 
 function textLine(line: DigestLine): string {
   const { name, place, owed, since } = line;

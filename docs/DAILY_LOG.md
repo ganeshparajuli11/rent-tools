@@ -545,3 +545,66 @@ Needs a human:
 - The `auto/2026-11-17` branch is fully merged once `main` has moved and is
   **not** a blocked build. The next run should treat it, and the two older
   `auto/*` branches, as resolved and not count them as a task.
+
+## 2026-11-18
+
+### Start of run
+
+- Latest CI run on `main` (commit `4753458`): passed. Nothing to fix.
+- No open "Daily build blocked" issue. The branches `auto/2026-11-15`,
+  `auto/2026-11-16` and `auto/2026-11-17` still exist, but all three are
+  ancestors of `main` (fully merged, as the earlier logs say), so they are
+  not blocked builds and were not counted as a task.
+- **Environment problem, fourth day:** `registry.npmjs.org` still does not
+  resolve here (it is on the direct-access list but has no route, and the
+  proxy refuses it with 403). `pnpm install --frozen-lockfile` cannot run,
+  there is no `node_modules`, and the Next.js guides cannot be read. Not
+  worked around.
+- Decision: same approach as the last three days. Work goes to
+  `auto/2026-11-18`, where CI runs every Step 5 check; `main` is only
+  fast-forwarded to a commit that has passed them all. New code uses only
+  Next.js APIs the existing code already uses. Prettier 3.8 (a local copy,
+  without the Tailwind plugin) is run here before pushing.
+
+### Plan
+
+**Task 1 — Overdue reminders (backlog item 6)**
+
+- Scope: a daily email to each organisation's owners listing late rent
+  (tenant, home or room, amount owed, since when), with a total and a link
+  to the dashboard. Sent through Resend from a new cron route
+  (`/api/cron/overdue-reminders`) protected like the rent-charges one. A
+  switch on a new Settings page turns it off for the organisation. The route
+  does nothing when `RESEND_API_KEY` or the new `EMAIL_FROM` is missing, and
+  sends at most one email per organisation per London day.
+- Files: migration adding `organisations.overdue_email_enabled`,
+  `database.types.ts`, `src/lib/overdue-digest.ts` (pure email text),
+  `src/lib/validation/settings.ts`, `src/server/email.ts`,
+  `src/server/settings.ts`, `src/server/overdue-reminders.ts`, the cron
+  route, `src/app/(app)/settings/**`, the menu, `src/server/run-action.ts`
+  (new scope), `src/lib/env.ts`, `src/server/env.ts`, `vercel.json`,
+  `.env.example`, the service-client guard test, README.
+- Tests: unit tests for the digest (subject, totals, HTML escaping, links),
+  the settings schema and the "send" decision; isolation cases for the
+  settings column; a Playwright check of the Settings page at phone and
+  desktop widths.
+- Risks: emails go to real people, so a bug could send repeats or ignore
+  the off switch. Guarded by a once-a-day check in `audit_log` plus a
+  Resend idempotency key, and by sending nothing until the migration is
+  applied. The Resend SDK types cannot be read here; CI's typecheck is the
+  check.
+
+**Task 2 — Security hardening (backlog item 7)**
+
+- Scope: a Content-Security-Policy on every response; a test that reads
+  every server action and checks it validates with Zod and goes through
+  `runAction` (session and rate limit), and that every data function that
+  writes derives the organisation and writes `audit_log`; tests for the
+  security headers.
+- Files: `src/lib/security-headers.ts`, `next.config.ts`, tests next to
+  them, `src/server/server-actions.guard.test.ts`.
+- Risks: a CSP that is too strict breaks the app in the browser, and it
+  cannot be opened in a browser here. So the policy allows inline scripts
+  (no nonces, which would also force every page to render per request) and
+  locks down everything else. A nonce-based script policy is a follow-up
+  once it can be tested in a real browser.

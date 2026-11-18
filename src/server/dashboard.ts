@@ -7,7 +7,7 @@ import {
   type DashboardSummary,
 } from "@/lib/dashboard";
 
-import type { Ctx } from "./context";
+import type { Ctx, Db } from "./context";
 import { getDashboardCharges } from "./rent";
 
 /**
@@ -44,20 +44,37 @@ export async function getDashboard(
   if (!membership) return null;
   const organisationId = membership.organisation_id;
 
-  const [homesResult, charges] = await Promise.all([
-    ctx.supabase
-      .from("properties")
-      .select(
-        "id, name, archived_at, rooms(id, name, archived_at), owner_leases(rent_pence, start_date, end_date), tenancies(id, room_id, tenant_name, start_date, end_date)",
-      )
-      .eq("organisation_id", organisationId)
-      .order("name", { ascending: true })
-      .order("id", { ascending: true }),
+  const [homes, charges] = await Promise.all([
+    loadDashboardHomes(ctx.supabase, organisationId),
     getDashboardCharges(ctx, organisationId, today),
   ]);
-  if (homesResult.error) throw homesResult.error;
 
-  const homes: DashboardHome[] = homesResult.data.map((home) => ({
+  return {
+    organisationName: membership.organisations?.name ?? "Your organisation",
+    today,
+    summary: buildDashboard({ homes, charges, today }),
+  };
+}
+
+/**
+ * Every home in the organisation with its rooms, owner leases and tenants,
+ * in one query. Takes a client so the daily email job can use it too.
+ */
+export async function loadDashboardHomes(
+  db: Db,
+  organisationId: string,
+): Promise<DashboardHome[]> {
+  const { data, error } = await db
+    .from("properties")
+    .select(
+      "id, name, archived_at, rooms(id, name, archived_at), owner_leases(rent_pence, start_date, end_date), tenancies(id, room_id, tenant_name, start_date, end_date)",
+    )
+    .eq("organisation_id", organisationId)
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+
+  return data.map((home) => ({
     id: home.id,
     name: home.name,
     archived: home.archived_at !== null,
@@ -79,10 +96,4 @@ export async function getDashboard(
       endDate: tenancy.end_date,
     })),
   }));
-
-  return {
-    organisationName: membership.organisations?.name ?? "Your organisation",
-    today,
-    summary: buildDashboard({ homes, charges, today }),
-  };
 }

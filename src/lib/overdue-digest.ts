@@ -18,7 +18,7 @@ export type OverdueDigest = {
   html: string;
 };
 
-/** Makes text safe to put inside HTML. Tenant and home names are typed by users. */
+/** Makes text safe inside HTML. Tenant and home names are typed by users. */
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -58,6 +58,42 @@ function lineOf(tenant: OverdueTenant): {
   };
 }
 
+const BODY_STYLE = [
+  "font-family:Arial,Helvetica,sans-serif",
+  "font-size:16px",
+  "line-height:1.5",
+  "color:#111827",
+  "max-width:600px",
+].join(";");
+const LIST_STYLE = "margin:0 0 16px;padding-left:20px";
+const SMALL_STYLE = "margin:0;font-size:14px;color:#4b5563";
+
+function paragraph(content: string): string {
+  return `<p style="margin:0 0 16px">${content}</p>`;
+}
+
+function htmlLink(href: string, label: string): string {
+  const safeHref = escapeHtml(href);
+  const safeLabel = escapeHtml(label);
+  return `<a href="${safeHref}" style="color:#1d4ed8">${safeLabel}</a>`;
+}
+
+type DigestLine = ReturnType<typeof lineOf>;
+
+function textLine(line: DigestLine): string {
+  const { name, place, owed, since } = line;
+  return `- ${name} (${place}): ${owed}, late since ${since}`;
+}
+
+function htmlLine(line: DigestLine): string {
+  const name = escapeHtml(line.name);
+  const place = escapeHtml(line.place);
+  const owed = escapeHtml(line.owed);
+  const since = escapeHtml(line.since);
+  const who = `<strong>${name}</strong> (${place})`;
+  return `<li style="margin:0 0 8px">${who}: ${owed}, late since ${since}</li>`;
+}
+
 /**
  * The email for one organisation. `overdue` is in the dashboard's order
  * (longest overdue first). Names only ever go in the body, never the
@@ -86,15 +122,16 @@ export function buildOverdueDigest({
   const rentUrl = appLink(appUrl, "/rent");
   const settingsUrl = appLink(appUrl, "/settings");
 
-  const subject = `Late rent: ${tenantsOwe(count)} ${total}`;
-  const intro = `Here is the late rent for ${organisationName} on ${formatDate(today)}.`;
-  const summary = `${tenantsOwe(count)} ${total} in total.`;
+  const owe = tenantsOwe(count);
+  const day = formatDate(today);
+  const subject = `Late rent: ${owe} ${total}`;
+  const intro = `Here is the late rent for ${organisationName} on ${day}.`;
+  const summary = `${owe} ${total} in total.`;
   const more =
     notListed > 0
       ? `And ${notListed} more. See them all on your dashboard.`
       : null;
-  const why =
-    "You get this email because late rent emails are turned on for your account.";
+  const why = "You get this email because late rent emails are turned on.";
 
   const text = [
     "Hello,",
@@ -102,10 +139,7 @@ export function buildOverdueDigest({
     intro,
     summary,
     "",
-    ...listed.map(
-      (line) =>
-        `- ${line.name} (${line.place}): ${line.owed}, late since ${line.since}`,
-    ),
+    ...listed.map(textLine),
     ...(more ? ["", more] : []),
     "",
     `See late rent: ${dashboardUrl}`,
@@ -116,28 +150,23 @@ export function buildOverdueDigest({
     "",
   ].join("\n");
 
-  const e = escapeHtml;
-  const paragraph = (content: string) =>
-    `<p style="margin:0 0 16px">${content}</p>`;
-  const link = (href: string, label: string) =>
-    `<a href="${e(href)}" style="color:#1d4ed8">${e(label)}</a>`;
+  const links = [
+    htmlLink(dashboardUrl, "See late rent"),
+    htmlLink(rentUrl, "Record a payment"),
+  ].join(" &middot; ");
+  const stop = htmlLink(settingsUrl, "Turn them off in Settings");
 
   const html = [
-    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#111827;max-width:600px">',
+    `<div style="${BODY_STYLE}">`,
     paragraph("Hello,"),
-    paragraph(e(intro)),
-    paragraph(`<strong>${e(summary)}</strong>`),
-    '<ul style="margin:0 0 16px;padding-left:20px">',
-    ...listed.map(
-      (line) =>
-        `<li style="margin:0 0 8px"><strong>${e(line.name)}</strong> (${e(line.place)}): ${e(line.owed)}, late since ${e(line.since)}</li>`,
-    ),
+    paragraph(escapeHtml(intro)),
+    paragraph(`<strong>${escapeHtml(summary)}</strong>`),
+    `<ul style="${LIST_STYLE}">`,
+    ...listed.map(htmlLine),
     "</ul>",
-    ...(more ? [paragraph(e(more))] : []),
-    paragraph(
-      `${link(dashboardUrl, "See late rent")} &middot; ${link(rentUrl, "Record a payment")}`,
-    ),
-    `<p style="margin:0;font-size:14px;color:#4b5563">${e(why)} ${link(settingsUrl, "Turn them off in Settings")}.</p>`,
+    ...(more ? [paragraph(escapeHtml(more))] : []),
+    paragraph(links),
+    `<p style="${SMALL_STYLE}">${escapeHtml(why)} ${stop}.</p>`,
     "</div>",
   ].join("\n");
 

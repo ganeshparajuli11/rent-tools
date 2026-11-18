@@ -175,12 +175,15 @@ export function buildOverdueDigest({
   return { subject, text, html };
 }
 
-export type DigestDecision =
-  | "send"
-  | "turned-off"
-  | "already-sent"
-  | "nothing-late"
-  | "no-recipients";
+/** What the daily job does for one organisation: send, or why not. */
+export const DIGEST_DECISIONS = [
+  "send",
+  "turned-off",
+  "already-sent",
+  "nothing-late",
+  "no-recipients",
+] as const;
+export type DigestDecision = (typeof DIGEST_DECISIONS)[number];
 
 /** Whether to send an organisation its email today, and if not, why not. */
 export function digestDecision({

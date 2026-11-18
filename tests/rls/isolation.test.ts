@@ -29,7 +29,10 @@ import { type Ctx, UserFacingError } from "@/server/context";
 import { getDashboard } from "@/server/dashboard";
 import * as homes from "@/server/homes";
 import * as rent from "@/server/rent";
+import type { EmailMessage } from "@/server/email";
+import { sendOverdueDigests } from "@/server/overdue-reminders";
 import { generateAllRentCharges } from "@/server/rent-charges";
+import * as settings from "@/server/settings";
 import * as tenants from "@/server/tenants";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -993,5 +996,92 @@ describe("rent server actions: user A cannot touch user B's rent or payments", (
       expect.arrayContaining(["payment.recorded"]),
     );
     expect(JSON.stringify(audit)).not.toContain("Rent Payer");
+  });
+});
+
+describe("settings and the late rent email: user A cannot see or change B's", () => {
+  const ctxOf = (user: TestUser): Ctx => ({
+    supabase: user.client as unknown as SupabaseClient<Database>,
+    userId: user.userId,
+  });
+
+  async function switchOf(user: TestUser): Promise<boolean | undefined> {
+    const { data } = await admin
+      .from("organisations")
+      .select("overdue_email_enabled")
+      .eq("id", user.orgId)
+      .single();
+    return (data as { overdue_email_enabled?: boolean } | null)
+      ?.overdue_email_enabled;
+  }
+
+  it("the switch starts on, and A's change only touches A's organisation", async () => {
+    expect(await switchOf(a)).toBe(true);
+    expect(await switchOf(b)).toBe(true);
+
+    const mine = await settings.getOverdueEmailSettings(ctxOf(a));
+    expect(mine.organisationName).toBe(`RLS test ${runId} A`);
+    expect(mine.isOwner).toBe(true);
+    expect(mine.enabled).toBe(true);
+
+    await settings.setOverdueEmailEnabled(ctxOf(a), false);
+    expect(await switchOf(a)).toBe(false);
+    expect(await switchOf(b)).toBe(true);
+
+    // Straight at the table: RLS stops A changing B's switch.
+    await a.client
+      .from("organisations")
+      .update({ overdue_email_enabled: false })
+      .eq("id", b.orgId);
+    expect(await switchOf(b)).toBe(true);
+
+    // The change was audited.
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("action, changes")
+      .eq("action", "organisation.overdue_email_changed");
+    expect(audit).toHaveLength(1);
+
+    await settings.setOverdueEmailEnabled(ctxOf(a), true);
+    expect(await switchOf(a)).toBe(true);
+  });
+
+  it("the daily email job run as A only reads A's late rent, and respects the switch", async () => {
+    // The real job uses the service-role client. With A's own session, RLS
+    // keeps it inside A's organisation, which is what this checks.
+    const db = a.client as unknown as SupabaseClient<Database>;
+    const sent: EmailMessage[] = [];
+    const askedFor: string[] = [];
+    const run = () =>
+      sendOverdueDigests(db, {
+        appUrl: "https://rentdesk.example",
+        send: async (message) => {
+          sent.push(message);
+          return { sent: true, id: null };
+        },
+        recipientsFor: async (organisationId) => {
+          askedFor.push(organisationId);
+          return ["owner-a@example.com"];
+        },
+      });
+
+    const result = await run();
+    expect(result.status).toBe("done");
+    expect(result.organisationsChecked).toBe(1);
+    expect(new Set(askedFor)).toEqual(
+      askedFor.length ? new Set([a.orgId]) : new Set(),
+    );
+    for (const message of sent) {
+      expect(message.text).not.toContain("Tenant B");
+      expect(message.idempotencyKey).toContain(a.orgId);
+    }
+
+    // Turned off: nothing is sent.
+    await settings.setOverdueEmailEnabled(ctxOf(a), false);
+    sent.length = 0;
+    const off = await run();
+    expect(off.counts["turned-off"]).toBe(1);
+    expect(sent).toHaveLength(0);
+    await settings.setOverdueEmailEnabled(ctxOf(a), true);
   });
 });

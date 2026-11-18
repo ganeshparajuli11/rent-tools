@@ -293,7 +293,8 @@ type DashboardChargeRow = {
  * old). Usually one query; long histories are read in pages.
  */
 export async function getDashboardCharges(
-  ctx: Ctx,
+  // Only the client is used, so the daily email job can pass its own.
+  ctx: Pick<Ctx, "supabase">,
   organisationId: string,
   today: string,
 ): Promise<DashboardCharge[]> {

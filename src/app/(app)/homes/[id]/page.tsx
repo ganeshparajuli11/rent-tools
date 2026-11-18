@@ -7,6 +7,7 @@ import {
   ArchiveHomeButton,
   RestoreHomeButton,
 } from "@/components/homes/home-archive-buttons";
+import { HomePhotos } from "@/components/homes/home-photos";
 import { RoomList } from "@/components/homes/room-list";
 import { buttonVariants } from "@/components/ui/button";
 import { formatDate, ordinal } from "@/lib/dates";
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
 import { getHome } from "@/server/homes";
+import { listHomePhotos } from "@/server/photos";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -27,7 +29,11 @@ export default async function HomeDetailPage({
   if (!idSchema.safeParse(id).success) notFound();
 
   const supabase = await createClient();
-  const home = await getHome({ supabase, userId: user.id }, id);
+  const ctx = { supabase, userId: user.id };
+  const [home, photos] = await Promise.all([
+    getHome(ctx, id),
+    listHomePhotos(ctx, id),
+  ]);
   if (!home) notFound();
 
   const addressLines = [
@@ -81,6 +87,13 @@ export default async function HomeDetailPage({
           Edit home
         </Link>
       </header>
+
+      <HomePhotos
+        homeId={home.id}
+        homeName={home.name}
+        photos={photos}
+        readOnly={home.archived}
+      />
 
       <section aria-labelledby="owner-heading" className="flex flex-col gap-2">
         <h2 id="owner-heading" className="text-xl font-semibold">

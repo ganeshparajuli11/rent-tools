@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import { SignInForm } from "@/components/auth/sign-in-form";
+import { TestPasswordForm } from "@/components/auth/test-password-form";
+import { isTestLoginEnabled } from "@/server/test-login";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -28,6 +30,16 @@ export default async function SignInPage({
         </p>
       ) : null}
       <SignInForm />
+      {isTestLoginEnabled() ? (
+        <details className="rounded-xl border p-4">
+          <summary className="min-h-11 cursor-pointer content-center text-base">
+            Testing: sign in with a password
+          </summary>
+          <div className="mt-4">
+            <TestPasswordForm />
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

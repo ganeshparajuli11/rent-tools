@@ -125,7 +125,16 @@ export function HomesTable({
                 scope="row"
                 className="h-auto px-4 py-2 whitespace-normal"
               >
-                <span className="flex flex-wrap items-center gap-2">
+                <span className="flex flex-wrap items-center gap-3">
+                  {home.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={home.coverUrl}
+                      alt=""
+                      loading="lazy"
+                      className="size-12 shrink-0 rounded-md border object-cover"
+                    />
+                  ) : null}
                   <Link
                     href={`/homes/${home.id}`}
                     className="inline-flex min-h-11 items-center rounded-lg text-base font-semibold underline underline-offset-4"

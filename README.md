@@ -50,16 +50,17 @@ Open http://localhost:3000.
 All variables are listed with comments in [`.env.example`](.env.example).
 Put real values in `.env.local`, which git ignores. Never commit real keys.
 
-| Variable                               | Where it is used                                | Required                              |
-| -------------------------------------- | ----------------------------------------------- | ------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Browser + server                                | Yes                                   |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server (replaces the legacy anon key) | Yes                                   |
-| `SUPABASE_SERVICE_ROLE_KEY`            | Server only. Bypasses RLS                       | Yes, when server code uses it         |
-| `RESEND_API_KEY`                       | Server only                                     | When sending email                    |
-| `UPSTASH_REDIS_REST_URL`               | Server only                                     | Production (skipped locally if unset) |
-| `UPSTASH_REDIS_REST_TOKEN`             | Server only                                     | Production (skipped locally if unset) |
-| `CRON_SECRET`                          | Server only. Secret header for the daily cron   | Production (cron is refused if unset) |
-| `NEXT_PUBLIC_APP_URL`                  | Links and auth redirects                        | Defaults to `http://localhost:3000`   |
+| Variable                               | Where it is used                                    | Required                              |
+| -------------------------------------- | --------------------------------------------------- | ------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Browser + server                                    | Yes                                   |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server (replaces the legacy anon key)     | Yes                                   |
+| `SUPABASE_SERVICE_ROLE_KEY`            | Server only. Bypasses RLS                           | Yes, when server code uses it         |
+| `RESEND_API_KEY`                       | Server only                                         | When sending email                    |
+| `UPSTASH_REDIS_REST_URL`               | Server only                                         | Production (skipped locally if unset) |
+| `UPSTASH_REDIS_REST_TOKEN`             | Server only                                         | Production (skipped locally if unset) |
+| `CRON_SECRET`                          | Server only. Secret header for the daily cron       | Production (cron is refused if unset) |
+| `NEXT_PUBLIC_APP_URL`                  | Links and auth redirects                            | Defaults to `http://localhost:3000`   |
+| `ENABLE_TEST_LOGIN`                    | Server only. `true` shows the demo password sign-in | Testing only. Never in real use       |
 
 How they are checked:
 
@@ -241,6 +242,33 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/rent-c
 
 Until the job is switched on, tenants still get their charges when they are
 added, but a new month's rent will not appear on its own.
+
+## Photos
+
+- Each home can have up to 20 photos (JPG, PNG or WebP, 5 MB each). They are
+  shown on the home page, and the first one is the home's picture in the list.
+- Files live in the private `property-photos` Storage bucket at
+  `<organisation_id>/<home_id>/<uuid>.<ext>`. Pages show them with signed
+  links that last an hour.
+- Uploading takes three steps so the file never goes through our server:
+  the server picks the path (`preparePhotoUploadAction`), the browser uploads
+  the file with the user's own session (Storage policies only allow their
+  organisation's folder), then the server checks the path and records the row
+  (`addPhotoAction`). Big phone photos are shrunk in the browser first.
+- Removing a photo deletes the row and the file. Any member can do it.
+
+## Demo account for testing
+
+`pnpm seed:demo` fills the Supabase project in `.env.local` with a demo
+account: 4 homes, rooms, owners, tenants (one moved out), months of rent with
+paid, late, part-paid and due months, and drawn pictures for each home. Run
+it again to reset it. It only ever touches the demo account.
+
+- Email `test@rentdesk.test`, password `test@123` (change them with
+  `TEST_LOGIN_EMAIL` and `TEST_LOGIN_PASSWORD`).
+- The sign-in page only shows "Testing: sign in with a password" when the app
+  has `ENABLE_TEST_LOGIN=true`, and it only accepts the demo email.
+- **Remove `ENABLE_TEST_LOGIN` before real landlords use the app.**
 
 ## Data model and security
 

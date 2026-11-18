@@ -26,5 +26,14 @@ export const verifyCodeSchema = z.object({
     ),
 });
 
+/** Test-only password sign-in (see src/server/test-login.ts). */
+export const passwordSignInSchema = z.object({
+  email: emailSchema,
+  password: z
+    .string({ error: "Enter the password" })
+    .min(1, { error: "Enter the password" })
+    .max(200, { error: "That password is too long" }),
+});
+
 export type SignInInput = z.infer<typeof signInSchema>;
 export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;

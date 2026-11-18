@@ -281,6 +281,51 @@ export type Database = {
           },
         ];
       };
+      property_photos: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          organisation_id: string;
+          property_id: string;
+          storage_path: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id: string;
+          property_id: string;
+          storage_path: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id?: string;
+          property_id?: string;
+          storage_path?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_photos_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "property_photos_property_id_organisation_id_fkey";
+            columns: ["property_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "properties";
+            referencedColumns: ["id", "organisation_id"];
+          },
+        ];
+      };
       rent_charges: {
         Row: {
           amount_pence: number;

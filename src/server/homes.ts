@@ -7,6 +7,7 @@ import {
   type HomesSort,
 } from "@/lib/homes-sort";
 import type { LetType, UpdateHomeValues } from "@/lib/validation/homes";
+import { PHOTO_BUCKET } from "@/lib/validation/photos";
 import { type CreateHomeValues } from "@/lib/validation/homes";
 
 import {
@@ -39,6 +40,8 @@ export type HomeListItem = {
   roomCount: number;
   letType: LetType;
   archived: boolean;
+  /** Short-lived signed link to the home's first photo, or null. */
+  coverUrl: string | null;
 };
 
 export type HomeOwner = {
@@ -128,10 +131,16 @@ export async function listHomes(
   let query = ctx.supabase
     .from("properties")
     .select(
-      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, archived_at)",
+      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, archived_at), property_photos(storage_path, created_at)",
       { count: "exact" },
     )
-    .eq("organisation_id", organisationId);
+    .eq("organisation_id", organisationId)
+    // Only the first photo of each home, for the cover picture.
+    .order("created_at", {
+      referencedTable: "property_photos",
+      ascending: true,
+    })
+    .limit(1, { referencedTable: "property_photos" });
 
   if (!includeArchived) query = query.is("archived_at", null);
 
@@ -146,6 +155,23 @@ export async function listHomes(
 
   if (error) throw error;
 
+  // Sign every cover photo in one call. A failure only hides the pictures.
+  const coverPaths = (data ?? []).flatMap((row) =>
+    row.property_photos[0] ? [row.property_photos[0].storage_path] : [],
+  );
+  const coverUrls = new Map<string, string>();
+  if (coverPaths.length) {
+    const { data: signed, error: signError } = await ctx.supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(coverPaths, 60 * 60);
+    if (signError) {
+      console.error("[homes] cover signing failed", { name: signError.name });
+    }
+    for (const item of signed ?? []) {
+      if (item.path && item.signedUrl) coverUrls.set(item.path, item.signedUrl);
+    }
+  }
+
   const homes: HomeListItem[] = (data ?? []).map((row) => ({
     id: row.id,
     name: row.name,
@@ -155,6 +181,9 @@ export async function listHomes(
     roomCount: row.rooms.filter((room) => room.archived_at === null).length,
     letType: toLetType(row.property_type),
     archived: row.archived_at !== null,
+    coverUrl: row.property_photos[0]
+      ? (coverUrls.get(row.property_photos[0].storage_path) ?? null)
+      : null,
   }));
 
   const total = count ?? homes.length;

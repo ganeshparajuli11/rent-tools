@@ -4,13 +4,18 @@ import { redirect } from "next/navigation";
 
 import { rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
-import { signInSchema, verifyCodeSchema } from "@/lib/validation/auth";
+import {
+  passwordSignInSchema,
+  signInSchema,
+  verifyCodeSchema,
+} from "@/lib/validation/auth";
 import {
   clearPendingSignInEmail,
   getPendingSignInEmail,
   setPendingSignInEmail,
 } from "@/server/pending-sign-in";
 import { getClientIp } from "@/server/request";
+import { isTestLoginEnabled, testLoginEmail } from "@/server/test-login";
 
 export type AuthFormState = {
   error?: string;
@@ -145,6 +150,56 @@ export async function resendSignInCode(): Promise<AuthFormState> {
   const failed = await sendCode(email);
   if (failed) return { error: failed.error };
   return { notice: MESSAGES.newCodeSent };
+}
+
+/**
+ * Test-only password sign-in for the demo account. Refused unless
+ * ENABLE_TEST_LOGIN=true, and only for the demo email (src/server/test-login.ts).
+ */
+export async function signInWithTestPassword(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  if (!isTestLoginEnabled()) {
+    return { error: "Password sign-in is switched off." };
+  }
+
+  const rawEmail = formData.get("email");
+  const parsed = passwordSignInSchema.safeParse({
+    email: rawEmail,
+    password: formData.get("password"),
+  });
+  const echoEmail = typeof rawEmail === "string" ? rawEmail : "";
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? MESSAGES.somethingWrong,
+      email: echoEmail,
+    };
+  }
+
+  const { email, password } = parsed.data;
+  const wrong = "That email and password did not work.";
+  if (email !== testLoginEmail()) return { error: wrong, email };
+
+  try {
+    if (await isRateLimited("test-password", email)) {
+      return { error: MESSAGES.tooManyTries, email };
+    }
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      logAuthError("signInWithPassword", error);
+      return { error: wrong, email };
+    }
+  } catch (error) {
+    logAuthError("signInWithTestPassword", error);
+    return { error: MESSAGES.somethingWrong, email };
+  }
+
+  redirect("/dashboard");
 }
 
 /** Sign out of this device and go back to the sign-in screen. */

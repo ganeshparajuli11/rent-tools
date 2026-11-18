@@ -12,7 +12,10 @@ import { describe, expect, it } from "vitest";
 const SRC = join(process.cwd(), "src");
 
 /** The only files allowed to import src/server/service-client.ts. */
-const ALLOWED_IMPORTERS = ["app/api/cron/rent-charges/route.ts"];
+const ALLOWED_IMPORTERS = [
+  "app/api/cron/overdue-reminders/route.ts",
+  "app/api/cron/rent-charges/route.ts",
+];
 
 /** The only file allowed to read the key from the environment. */
 const ALLOWED_KEY_READERS = ["server/env.ts"];
@@ -34,12 +37,12 @@ describe("service-role client", () => {
     expect(files.map((f) => f.path)).toContain("server/service-client.ts");
   });
 
-  it("is imported by the cron route and nothing else", () => {
+  it("is imported by the cron routes and nothing else", () => {
     const importers = files
       .filter((f) => f.path !== "server/service-client.ts")
       .filter((f) => /from\s+["'][^"']*service-client["']/.test(f.text))
       .map((f) => f.path);
-    expect(importers).toEqual(ALLOWED_IMPORTERS);
+    expect([...importers].sort()).toEqual(ALLOWED_IMPORTERS);
   });
 
   it("is never imported by browser code", () => {

@@ -31,6 +31,9 @@ export const serverEnvSchema = z
   .object({
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     RESEND_API_KEY: z.string().min(1).optional(),
+    // Who emails come from, e.g. "RentDesk <reminders@your-domain>". The
+    // domain must be verified in Resend. Without it no email is sent.
+    EMAIL_FROM: z.string().min(3).optional(),
     UPSTASH_REDIS_REST_URL: z.url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
     // Secret header for the daily cron route. Without it the route refuses

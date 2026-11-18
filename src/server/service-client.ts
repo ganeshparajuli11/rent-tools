@@ -12,8 +12,8 @@ import { getServerEnv } from "./env";
  * A Supabase client with the service-role key. It BYPASSES row-level
  * security, so it can read and write every organisation's data.
  *
- * It exists for one job: the daily cron route that makes rent charges, which
- * has no signed-in user. Do not import it anywhere else. Pages and server
+ * It exists for the daily cron routes (rent charges, and the late rent
+ * email), which have no signed-in user. Do not import it anywhere else. Pages and server
  * actions must use the signed-in user's own client (src/lib/supabase/server.ts)
  * so RLS applies. A unit test (service-client.guard.test.ts) fails if any
  * other file imports this one.

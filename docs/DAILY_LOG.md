@@ -765,3 +765,56 @@ Needs a human:
   README and check how it looks on a phone.
 - Delete the merged branches `auto/2026-11-15`, `auto/2026-11-16` and
   `auto/2026-11-17`, and the probe branch `auto/2026-11-18-format-probe`.
+
+## 2026-11-19
+
+### Start of run
+
+- Latest CI run on `main` (commit `db70e76`, "Add property photos, a
+  test-only password sign-in and a demo seed script", pushed after the last
+  daily run): passed. `pnpm audit` on it reported only "1 moderate", so the
+  picomatch advisory GHSA-fc5q-39xc-vjpf that blocked yesterday is no longer
+  rated high.
+- Open issue #8 "Daily build blocked: 2026-11-18" and the branch
+  `auto/2026-11-18` (backlog items 6 and 7). Resolving it is **task 1**.
+- **Environment problem, fifth day:** `registry.npmjs.org` still does not
+  resolve here, so `pnpm install` cannot run and the Next.js guides in
+  `node_modules/next/dist/docs/` cannot be read. Same approach as before:
+  work goes to `auto/2026-11-19`, CI runs every Step 5 check there, and
+  `main` is only fast-forwarded to a commit that passed them all. New code
+  only uses Next.js APIs the existing code already uses.
+
+### Plan
+
+**Task 1 — Unblock yesterday's build (items 6 and 7)**
+
+- Scope: rebase `auto/2026-11-18` onto `main` as `auto/2026-11-19`, resolve
+  conflicts with the photos commit, and make yesterday's server action guard
+  cover what `main` added since (`photo-actions.ts`, the test-only password
+  sign-in). Then let CI confirm every check, including the audit.
+- Files: `docs/PENDING_MIGRATIONS.md` and `README.md` (conflicts),
+  `src/server/server-actions.guard.test.ts`.
+- Tests: the guard test itself; the full CI run.
+- Risks: the guard could pass by being loosened. Only one named exemption is
+  added (a data function that writes nothing), with its reason in the test.
+
+**Task 2 — Data rights (backlog item 8)**
+
+- Scope: owners can download three CSV files from Settings (homes, tenants,
+  payments), and can remove a moved-out tenant's personal details (name,
+  phone, email and payment notes), keeping the rent records.
+- Files: `src/lib/csv.ts` (CSV building and escaping, pure),
+  `src/lib/validation/data-rights.ts`, `src/server/data-export.ts`,
+  `src/app/api/export/route.ts`, `src/server/tenants.ts` (remove details),
+  `src/app/(app)/tenants/actions.ts`, a new component on the tenant page, the
+  Settings page, the server action guard, README.
+- Tests: unit tests for CSV escaping (commas, quotes, new lines, spreadsheet
+  formulas), pounds formatting and the schemas; the guard test covers the
+  new action and route; an e2e check of the Settings downloads and the
+  remove-details flow at phone and desktop widths; an isolation case that
+  another organisation's tenant cannot be changed.
+- Risks: an export is a bulk copy of personal data, so it is owners only,
+  rate limited, scoped to the organisation and written to `audit_log`.
+  Cells that start with `=`, `+`, `-`, `@` are made safe for spreadsheets.
+  Removing details cannot be undone, which clashes with the Undo rule (see
+  decisions).

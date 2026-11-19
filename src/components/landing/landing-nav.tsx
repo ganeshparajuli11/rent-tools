@@ -38,7 +38,7 @@ export function LandingNav() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-500",
         scrolled || open
-          ? "bg-white/80 shadow-[0_1px_0_rgb(0_0_0/0.06)] backdrop-blur-xl"
+          ? "bg-white/85 shadow-[0_1px_0_rgb(0_0_0/0.06)] backdrop-blur-md"
           : "bg-transparent",
       )}
     >

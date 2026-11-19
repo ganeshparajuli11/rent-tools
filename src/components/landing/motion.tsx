@@ -45,6 +45,11 @@ function measure(el: HTMLElement, mode: Mode) {
     value = (vh - rect.top) / (vh + rect.height);
   } else {
     value = (vh - rect.top) / (vh * 0.7);
+    // Text near the very end of the page can never climb 30% up the
+    // screen, so finish it once the page is scrolled to the bottom.
+    const atBottom =
+      window.scrollY + vh >= document.documentElement.scrollHeight - 4;
+    if (atBottom && rect.top < vh) value = 1;
   }
   return Math.min(1, Math.max(0, value));
 }

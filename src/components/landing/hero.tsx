@@ -174,18 +174,20 @@ export function Hero() {
           </p>
         </div>
 
-        {/* Clouds drifting in front of the building, rising as you scroll. */}
+        {/* Clouds drifting in front of the building, rising as you scroll.
+            The layer runs well below the screen so rising never shows its
+            bottom edge. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 bottom-0 z-20 h-[45vh] motion-reduce:hidden"
-          style={{ transform: `translateY(calc(var(--p) * -35vh))` }}
+          className="absolute inset-x-0 top-[55svh] z-20 h-[110svh] motion-reduce:hidden"
+          style={{ transform: `translateY(calc(var(--p) * -35svh))` }}
         >
-          <div className="pd-drift absolute inset-0">
-            <Cloud className="-left-[10%] bottom-[-18%] h-[70%] w-[55%]" />
-            <Cloud className="left-[25%] bottom-[-25%] h-[65%] w-[50%]" />
-            <Cloud className="right-[-8%] bottom-[-20%] h-[75%] w-[50%]" />
+          <div className="pd-drift absolute inset-x-0 top-0 h-[45svh]">
+            <Cloud className="top-[18%] -left-[10%] h-[85%] w-[55%]" />
+            <Cloud className="top-[28%] left-[25%] h-[80%] w-[50%]" />
+            <Cloud className="top-[20%] -right-[8%] h-[90%] w-[50%]" />
           </div>
-          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-white/90 to-transparent" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_22%,rgb(255_255_255/0.88)_42%,rgb(255_255_255/0.96)_60%,white)]" />
         </div>
 
         {/* The final wash to white, leading into the page below. */}

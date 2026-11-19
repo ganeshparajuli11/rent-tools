@@ -236,10 +236,10 @@ function FeatureRow({
           {feature.body}
         </p>
       </div>
-      <div className="overflow-hidden" aria-hidden="true">
+      <div className="min-w-0 overflow-hidden" aria-hidden="true">
         <span
           className={cn(
-            "block text-[clamp(3.5rem,11vw,10rem)] leading-[0.9] font-medium tracking-[-0.05em] text-white transition-transform duration-1000 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:translate-y-0",
+            "block pb-[0.12em] text-[clamp(3rem,8.5vw,7.5rem)] leading-[1] font-medium tracking-[-0.05em] text-white transition-transform duration-1000 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:translate-y-0",
             shown ? "translate-y-0" : "translate-y-full",
           )}
         >

@@ -1,4 +1,10 @@
-# RentDesk
+# PropDesk
+
+Property management for UK landlords and letting managers (formerly RentDesk).
+What to build: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md). How it looks:
+[`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md). Open questions:
+[`docs/DECISIONS.md`](docs/DECISIONS.md). Task book:
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 Simple property and rent management for small UK landlords and rent-to-rent
 operators. Add properties, rooms and tenancies, mark rent as paid or late, and

@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>PropDesk – Today</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F5F3}
+a{color:#0A0A0A}a:hover{color:#44403C}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="font-family: 'Geist', system-ui, sans-serif; color: #0A0A0A; background: #F6F5F3; min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch">
+
+  <!-- Sidebar -->
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-right: 1px solid #E7E5E4; padding: 20px 14px; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#0A0A0A"></rect><path d="M8 15.5 16 9l8 6.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.5 22.5h13" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"></path></svg>
+      <span style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em">PropDesk</span>
+    </div>
+
+    <button type="button" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 10px; border: 1px solid #E7E5E4; border-radius: 12px; background: #FAFAF9; text-align: left; cursor: pointer">
+      <span style="width: 32px; height: 32px; border-radius: 8px; background: #E7E5E4; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex: none">DL</span>
+      <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+        <span style="font-size: 14px; font-weight: 600; color: #0A0A0A">Demo Lettings</span>
+        <span style="font-size: 12px; color: #57534E">Property manager</span>
+      </span>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>
+    </button>
+
+    <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="4">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <sc-if value="{{ group.label }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #57534E; padding: 0 10px 6px">{{ group.label }}</span>
+        </sc-if>
+        <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="3">
+          <a href="#" style="{{ item.style }}">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.icon }}"></path></svg>
+            <span style="flex: 1">{{ item.label }}</span>
+            <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ item.badgeStyle }}">{{ item.badge }}</span>
+            </sc-if>
+          </a>
+        </sc-for>
+      </div>
+    </sc-for>
+
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid #E7E5E4">
+      <span style="width: 34px; height: 34px; border-radius: 50%; background: #0A0A0A; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex: none">AM</span>
+      <span style="display: flex; flex-direction: column; min-width: 0">
+        <span style="font-size: 14px; font-weight: 600">Alex Morgan</span>
+        <span style="font-size: 12px; color: #57534E">Owner</span>
+      </span>
+    </div>
+  </nav>
+
+  <!-- Main column -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+
+    <!-- Top bar -->
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 32px; background: rgba(255,255,255,0.85); border-bottom: 1px solid #E7E5E4">
+      <label for="global-search" style="flex: 1 1 320px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; background: #F5F5F4; border-radius: 12px; color: #57534E; max-width: 560px">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search</span>
+        <input id="global-search" type="search" placeholder="Search homes, tenants, owners…" style="flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 15px; color: #0A0A0A; outline-offset: 4px">
+        <span style="font-size: 12px; border: 1px solid #D6D3D1; border-radius: 6px; padding: 2px 6px; color: #57534E">⌘K</span>
+      </label>
+      <div style="display: flex; align-items: center; gap: 8px; margin-left: auto">
+        <button type="button" aria-label="Notifications" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #E7E5E4; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+          <span style="position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: #DC2626; border: 2px solid #fff"></span>
+        </button>
+        <button type="button" style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #0A0A0A; color: #fff; font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 8px; cursor: pointer">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+          New
+        </button>
+      </div>
+    </header>
+
+    <main style="padding: 32px; display: flex; flex-direction: column; gap: 28px; max-width: 1240px; width: 100%; box-sizing: border-box">
+
+      <!-- Greeting -->
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 14px; color: #57534E">Thursday 19 November</span>
+          <h1 style="margin: 0; font-size: 36px; line-height: 1.1; font-weight: 600; letter-spacing: -0.035em">Good morning, Alex.</h1>
+          <p style="margin: 0; font-size: 16px; color: #44403C">Two things need you today. Everything else is on track.</p>
+        </div>
+        <span style="font-size: 12px; font-weight: 500; color: #57534E; border: 1px dashed #A8A29E; border-radius: 999px; padding: 4px 10px">Demo data</span>
+      </div>
+
+      <!-- KPI cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+        <div style="background: #fff; border: 1px solid #E7E5E4; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 14px; color: #57534E">Rent received, November</span>
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums">£3,790 <span style="font-size: 16px; font-weight: 500; color: #57534E">of £5,075</span></span>
+          <div style="height: 8px; background: #F5F5F4; border-radius: 999px; overflow: hidden" role="img" aria-label="75% of this month's rent received"><div style="width: 75%; height: 100%; background: #0A0A0A; border-radius: 999px"></div></div>
+          <span style="font-size: 13px; color: #57534E">75% in · £1,285 still to come</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #E7E5E4; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 14px; color: #57534E">Late rent</span>
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; color: #B91C1C; font-variant-numeric: tabular-nums">£525</span>
+          <span style="font-size: 13px; color: #57534E">1 tenant · 14 days overdue</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #E7E5E4; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 14px; color: #57534E">Left after owners</span>
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; color: #047857; font-variant-numeric: tabular-nums">£875</span>
+          <span style="font-size: 13px; color: #57534E">£4,200 owed to 3 owners on the 1st</span>
+        </div>
+        <div style="background: #fff; border: 1px solid #E7E5E4; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 14px; color: #57534E">Rooms let</span>
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums">8 <span style="font-size: 16px; font-weight: 500; color: #57534E">of 11</span></span>
+          <div style="display: flex; gap: 4px" role="img" aria-label="8 of 11 rooms let">
+            <sc-for list="{{ occupancy }}" as="slot" hint-placeholder-count="11">
+              <span style="{{ slot.style }}"></span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start">
+
+        <!-- Needs you -->
+        <section aria-labelledby="needs-heading" style="background: #fff; border: 1px solid #E7E5E4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px">
+            <h2 id="needs-heading" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em">Needs you</h2>
+            <span style="font-size: 13px; color: #57534E">4 items</span>
+          </div>
+          <sc-for list="{{ attention }}" as="task" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid #F0EFED">
+              <span style="{{ task.iconWrap }}">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ task.icon }}"></path></svg>
+              </span>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 15px; font-weight: 600">{{ task.title }}</span>
+                <span style="font-size: 13px; color: #57534E">{{ task.detail }}</span>
+              </div>
+              <a href="#" style="flex: none; min-height: 40px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 10px; border: 1px solid #E7E5E4; font-size: 14px; font-weight: 500; text-decoration: none; color: #0A0A0A">{{ task.action }}</a>
+            </div>
+          </sc-for>
+        </section>
+
+        <!-- Homes -->
+        <section aria-labelledby="homes-heading" style="background: #fff; border: 1px solid #E7E5E4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+            <h2 id="homes-heading" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em">Your homes</h2>
+            <a href="#" style="font-size: 14px; font-weight: 500">View all</a>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+            <sc-for list="{{ homes }}" as="home" hint-placeholder-count="4">
+              <a href="#" style="display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: #0A0A0A">
+                <span style="position: relative; display: block; aspect-ratio: 3 / 2; border-radius: 14px; overflow: hidden; background: #F5F5F4">
+                  <img src="{{ home.photo }}" alt="" style="width: 100%; height: 100%; object-fit: cover; display: block">
+                  <span style="{{ home.chipStyle }}">{{ home.chip }}</span>
+                </span>
+                <span style="display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-size: 15px; font-weight: 600">{{ home.name }}</span>
+                  <span style="font-size: 13px; color: #57534E">{{ home.meta }}</span>
+                </span>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+      <!-- Rent this month -->
+      <section aria-labelledby="rent-heading" style="background: #fff; border: 1px solid #E7E5E4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+          <h2 id="rent-heading" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em">Rent this month</h2>
+          <div role="group" aria-label="Filter rent" style="display: flex; gap: 4px; padding: 4px; background: #F5F5F4; border-radius: 12px">
+            <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="4">
+              <button type="button" onClick="{{ tab.pick }}" aria-pressed="{{ tab.pressed }}" style="{{ tab.style }}">{{ tab.label }} <span style="color: #57534E; font-weight: 500">{{ tab.count }}</span></button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr style="text-align: left; color: #57534E">
+                <th style="font-weight: 500; padding: 10px 12px; border-bottom: 1px solid #E7E5E4">Tenant</th>
+                <th style="font-weight: 500; padding: 10px 12px; border-bottom: 1px solid #E7E5E4">Home</th>
+                <th style="font-weight: 500; padding: 10px 12px; border-bottom: 1px solid #E7E5E4">Due</th>
+                <th style="font-weight: 500; padding: 10px 12px; border-bottom: 1px solid #E7E5E4; text-align: right">Rent</th>
+                <th style="font-weight: 500; padding: 10px 12px; border-bottom: 1px solid #E7E5E4">Status</th>
+                <th style="padding: 10px 12px; border-bottom: 1px solid #E7E5E4"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Action</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ rows }}" as="row" hint-placeholder-count="8">
+                <tr>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED">
+                    <span style="display: flex; align-items: center; gap: 10px">
+                      <span style="width: 32px; height: 32px; border-radius: 50%; background: #F5F5F4; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex: none">{{ row.initials }}</span>
+                      <span style="font-weight: 600">{{ row.tenant }}</span>
+                    </span>
+                  </td>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED; color: #44403C">{{ row.home }}</td>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED; color: #44403C">{{ row.due }}</td>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500">{{ row.amount }}</td>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED"><span style="{{ row.pillStyle }}">{{ row.status }}</span></td>
+                  <td style="padding: 14px 12px; border-bottom: 1px solid #F0EFED; text-align: right">
+                    <sc-if value="{{ row.canPay }}" hint-placeholder-val="{{ true }}">
+                      <button type="button" style="min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #E7E5E4; background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap">Mark as paid</button>
+                    </sc-if>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start">
+
+        <!-- Repairs -->
+        <section aria-labelledby="repairs-heading" style="background: #fff; border: 1px solid #E7E5E4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px">
+            <h2 id="repairs-heading" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em">Open repairs</h2>
+            <a href="#" style="font-size: 14px; font-weight: 500">All repairs</a>
+          </div>
+          <sc-for list="{{ repairs }}" as="job" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid #F0EFED">
+              <span style="{{ job.priorityStyle }}">{{ job.priority }}</span>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 15px; font-weight: 600">{{ job.title }}</span>
+                <span style="font-size: 13px; color: #57534E">{{ job.detail }}</span>
+              </div>
+              <span style="font-size: 13px; color: #44403C; white-space: nowrap">{{ job.status }}</span>
+            </div>
+          </sc-for>
+        </section>
+
+        <!-- Activity -->
+        <section aria-labelledby="activity-heading" style="background: #fff; border: 1px solid #E7E5E4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+          <h2 id="activity-heading" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em">Recent activity</h2>
+          <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0">
+            <sc-for list="{{ activity }}" as="event" hint-placeholder-count="5">
+              <li style="display: flex; gap: 14px">
+                <span style="display: flex; flex-direction: column; align-items: center; flex: none">
+                  <span style="width: 10px; height: 10px; border-radius: 50%; background: #0A0A0A; margin-top: 6px"></span>
+                  <span style="width: 1px; flex: 1; background: #E7E5E4; min-height: 28px"></span>
+                </span>
+                <span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 18px">
+                  <span style="font-size: 14px">{{ event.text }}</span>
+                  <span style="font-size: 12px; color: #57534E">{{ event.when }}</span>
+                </span>
+              </li>
+            </sc-for>
+          </ol>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'all' };
+  }
+
+  renderVals() {
+    var ICON = {
+      today: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+      homes: 'M4 21V7l8-4 8 4v14M9 21v-6h6v6M8 10h.01M12 10h.01M16 10h.01',
+      owners: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+      tenants: 'M16 21a6 6 0 0 0-12 0M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21a5 5 0 0 0-5-5M17 3a4 4 0 0 1 0 8',
+      tenancies: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5',
+      rent: 'M17 7a4 4 0 0 0-7 2.5V14a3 3 0 0 1-2 3h10M7 12h7',
+      reports: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+      repairs: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
+      contractors: 'M2 18h20M4 18v-3a8 8 0 0 1 16 0v3M10 7V5h4v2',
+      settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 11h.1a2 2 0 1 1 0 4z',
+      alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+      clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+      door: 'M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.8a1 1 0 0 1-1.2 1L5 20.1V5.6a2 2 0 0 1 1.5-1.9l5-1.4A1.2 1.2 0 0 1 13 3.5z'
+    };
+
+    var navItem = function (label, icon, opts) {
+      opts = opts || {};
+      var active = !!opts.active;
+      return {
+        label: label,
+        icon: ICON[icon],
+        badge: opts.badge || '',
+        badgeStyle: opts.alert
+          ? 'font-size: 12px; font-weight: 600; color: #fff; background: #DC2626; border-radius: 999px; padding: 1px 8px'
+          : 'font-size: 12px; font-weight: 500; color: #57534E; background: #F5F5F4; border-radius: 999px; padding: 1px 8px',
+        style: 'display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 10px; border-radius: 10px; text-decoration: none; font-size: 15px; ' +
+          (active ? 'background: #0A0A0A; color: #FFFFFF; font-weight: 600' : 'color: #292524; font-weight: 500')
+      };
+    };
+
+    var navGroups = [
+      { label: '', items: [navItem('Today', 'today', { active: true })] },
+      { label: 'Portfolio', items: [navItem('Properties', 'homes', { badge: '4' }), navItem('Owners', 'owners', { badge: '3' }), navItem('Tenants', 'tenants', { badge: '8' }), navItem('Tenancies', 'tenancies')] },
+      { label: 'Money', items: [navItem('Rent', 'rent', { badge: '1 late', alert: true }), navItem('Reports', 'reports')] },
+      { label: 'Work', items: [navItem('Repairs', 'repairs', { badge: '3' }), navItem('Contractors', 'contractors')] },
+      { label: 'Account', items: [navItem('Settings', 'settings')] }
+    ];
+
+    var occupancy = [];
+    for (var i = 0; i < 11; i++) {
+      occupancy.push({ style: 'flex: 1; height: 8px; border-radius: 999px; background: ' + (i < 8 ? '#0A0A0A' : '#E7E5E4') });
+    }
+
+    var wrap = function (bg, fg) {
+      return 'width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; background: ' + bg + '; color: ' + fg;
+    };
+    var attention = [
+      { icon: ICON.rent, iconWrap: wrap('#FEF2F2', '#B91C1C'), title: 'Jordan Sample is 14 days late', detail: '£525 · Back bedroom, Sample House 01 · due 5 Nov', action: 'Record payment' },
+      { icon: ICON.alert, iconWrap: wrap('#FFF7ED', '#C2410C'), title: 'Boiler not heating', detail: 'Test Villa, Room 2 · urgent · reported 2 days ago, no contractor yet', action: 'Assign' },
+      { icon: ICON.clock, iconWrap: wrap('#EFF6FF', '#1D4ED8'), title: 'Tenancy ends in 6 weeks', detail: 'Alex Placeholder · Demo Court, Flat 3 · ends 31 Dec', action: 'Review' },
+      { icon: ICON.door, iconWrap: wrap('#F5F5F4', '#44403C'), title: 'Box room empty for 6 weeks', detail: 'Sample House 01 · £450 a month when let', action: 'Add tenant' }
+    ];
+
+    var chip = function (kind) {
+      var base = 'position: absolute; top: 10px; left: 10px; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,0.92); ';
+      return base + (kind === 'good' ? 'color: #047857' : kind === 'warn' ? 'color: #B45309' : 'color: #44403C');
+    };
+    var homes = [
+      { name: 'Sample House 01', meta: '4 rooms · 3 let · owner D. Clarke', photo: '[photo: Sample House 01]', chip: '1 room empty', chipStyle: chip('warn') },
+      { name: 'Demo Court, Flat 3', meta: 'Whole home · owner S. Lewis', photo: '[photo: Demo Court]', chip: 'Fully let', chipStyle: chip('good') },
+      { name: 'Test Villa', meta: '5 rooms · 4 let · owner Harbour Estates', photo: '[photo: Test Villa]', chip: '1 room empty', chipStyle: chip('warn') },
+      { name: 'Sample Cottage', meta: 'Whole home · you own it', photo: '[photo: Sample Cottage]', chip: 'Empty', chipStyle: chip('none') }
+    ];
+
+    var PILL = {
+      Paid: 'background: #ECFDF5; color: #047857',
+      Late: 'background: #FEF2F2; color: #B91C1C',
+      Due: 'background: #FFFBEB; color: #B45309',
+      'Part paid': 'background: #EFF6FF; color: #1D4ED8'
+    };
+    var all = [
+      { tenant: 'Taylor Example', home: 'Sample House 01 · Front bedroom', due: '1 Nov', amount: '£575', status: 'Paid' },
+      { tenant: 'Jordan Sample', home: 'Sample House 01 · Back bedroom', due: '5 Nov', amount: '£525', status: 'Late' },
+      { tenant: 'Casey Demo', home: 'Sample House 01 · Attic room', due: '25 Nov', amount: '£295 of £495', status: 'Part paid' },
+      { tenant: 'Alex Placeholder', home: 'Demo Court, Flat 3', due: '1 Nov', amount: '£1,150', status: 'Paid' },
+      { tenant: 'Morgan Fictional', home: 'Test Villa · Room 1', due: '1 Nov', amount: '£600', status: 'Paid' },
+      { tenant: 'Riley Sample', home: 'Test Villa · Room 2', due: '10 Nov', amount: '£580', status: 'Paid' },
+      { tenant: 'Jamie Test', home: 'Test Villa · Room 3', due: '28 Nov', amount: '£560', status: 'Due' },
+      { tenant: 'Drew Example', home: 'Test Villa · Room 4', due: '1 Nov', amount: '£590', status: 'Paid' }
+    ];
+    var self = this;
+    var filter = this.state.filter;
+    var match = function (row) {
+      if (filter === 'all') return true;
+      if (filter === 'late') return row.status === 'Late';
+      if (filter === 'due') return row.status === 'Due' || row.status === 'Part paid';
+      return row.status === 'Paid';
+    };
+    var rows = all.filter(match).map(function (row) {
+      return Object.assign({}, row, {
+        initials: row.tenant.split(' ').map(function (p) { return p[0]; }).join(''),
+        pillStyle: 'display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap; ' + PILL[row.status],
+        canPay: row.status !== 'Paid'
+      });
+    });
+    var tabDefs = [
+      { id: 'all', label: 'All', count: '8' },
+      { id: 'late', label: 'Late', count: '1' },
+      { id: 'due', label: 'Still due', count: '2' },
+      { id: 'paid', label: 'Paid', count: '5' }
+    ];
+    var tabs = tabDefs.map(function (t) {
+      var on = t.id === filter;
+      return {
+        label: t.label,
+        count: t.count,
+        pressed: on ? 'true' : 'false',
+        pick: function () { self.setState({ filter: t.id }); },
+        style: 'min-height: 36px; padding: 0 12px; border: 0; border-radius: 9px; font-size: 14px; cursor: pointer; ' +
+          (on ? 'background: #FFFFFF; color: #0A0A0A; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08)' : 'background: transparent; color: #292524; font-weight: 500')
+      };
+    });
+
+    var prio = function (level) {
+      var map = { Urgent: '#FEF2F2;color:#B91C1C', High: '#FFF7ED;color:#C2410C', Normal: '#F5F5F4;color:#44403C' };
+      return 'flex: none; width: 64px; text-align: center; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 4px 0; background: ' + map[level];
+    };
+    var repairs = [
+      { priority: 'Urgent', priorityStyle: prio('Urgent'), title: 'Boiler not heating', detail: 'Test Villa · Room 2 · reported 17 Nov', status: 'New' },
+      { priority: 'High', priorityStyle: prio('High'), title: 'Leaking kitchen tap', detail: 'Demo Court, Flat 3 · Demo Plumbing Ltd', status: 'Assigned' },
+      { priority: 'Normal', priorityStyle: prio('Normal'), title: 'Loose stair carpet', detail: 'Sample House 01 · Example Repairs Co', status: 'In progress' }
+    ];
+
+    var activity = [
+      { text: 'Payment of £580 recorded for Riley Sample', when: 'Today, 09:12' },
+      { text: 'Repair “Boiler not heating” reported at Test Villa', when: 'Tue 17 Nov' },
+      { text: 'Casey Demo paid £295 towards November', when: 'Mon 16 Nov' },
+      { text: 'Photo added to Sample Cottage', when: 'Fri 13 Nov' },
+      { text: 'Owner rent for Demo Court changed to £850', when: 'Mon 9 Nov' }
+    ];
+
+    return { navGroups: navGroups, occupancy: occupancy, attention: attention, homes: homes, rows: rows, tabs: tabs, repairs: repairs, activity: activity };
+  }
+}
+</script>
+</body>
+</html>

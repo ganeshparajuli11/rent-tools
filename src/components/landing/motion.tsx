@@ -82,6 +82,12 @@ export function useScrollProgress<T extends HTMLElement>(
     };
     const onScroll = () => {
       target = measure(el, mode);
+      // A big jump (back to the top, a reload) snaps instead of playing
+      // the whole scene backwards.
+      if (Math.abs(target - current) > 0.5) {
+        current = target;
+        el.style.setProperty("--p", current.toFixed(4));
+      }
       if (!frame) frame = requestAnimationFrame(tick);
     };
 

@@ -2,8 +2,10 @@
 
 import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { IMAGES, photoSrcSet, photoUrl } from "./images";
+import { REPLAY_EVENT } from "./landing-nav";
 import { LetterIn, useScrollProgress } from "./motion";
 
 /**
@@ -48,6 +50,14 @@ function Cloud({
 
 export function Hero() {
   const ref = useScrollProgress<HTMLElement>("pin", { ease: 0.12 });
+  // Bumped when the logo sends the reader back to the top: remounting the
+  // headline plays its letters-in animation again.
+  const [replay, setReplay] = useState(0);
+  useEffect(() => {
+    const onReplay = () => setReplay((count) => count + 1);
+    window.addEventListener(REPLAY_EVENT, onReplay);
+    return () => window.removeEventListener(REPLAY_EVENT, onReplay);
+  }, []);
 
   return (
     <section
@@ -76,6 +86,7 @@ export function Hero() {
 
         {/* Headline */}
         <div
+          key={replay}
           className="absolute inset-x-0 top-[17vh] z-20 flex flex-col items-center px-6 text-center motion-reduce:static motion-reduce:pt-32"
           style={{
             opacity: `calc(1 - ${ramp(0.02, 0.2)})`,

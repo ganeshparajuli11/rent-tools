@@ -14,6 +14,35 @@ const LINKS = [
   { href: "#how", label: "How it works" },
 ];
 
+/** Fired after jumping back to the top, so the hero replays its intro. */
+export const REPLAY_EVENT = "propdesk:replay-intro";
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Back to the very top, as if the page had just loaded. */
+function restartPage() {
+  window.history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search,
+  );
+  window.scrollTo({ top: 0, behavior: "instant" });
+  window.dispatchEvent(new Event(REPLAY_EVENT));
+}
+
+/** Smooth scroll to a section without leaving a #hash in the address. */
+function scrollToSection(event: React.MouseEvent, href: string) {
+  const target = document.querySelector(href);
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({
+    behavior: prefersReducedMotion() ? "auto" : "smooth",
+    block: "start",
+  });
+}
+
 /**
  * Top bar. See-through over the sky, then frosted white once the page has
  * scrolled. On phones the links fold into a menu.
@@ -21,6 +50,31 @@ const LINKS = [
 export function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // The landing page is a film: always start it from the beginning. Stop
+  // the browser restoring the old scroll position (or a #section) on
+  // reload, and put the default back when leaving the page.
+  useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    if (window.location.hash) {
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
+    }
+    window.scrollTo({ top: 0, behavior: "instant" });
+    // Also set before unload, so a reload never jumps down first.
+    const onLeave = () => {
+      window.history.scrollRestoration = "manual";
+    };
+    window.addEventListener("pagehide", onLeave);
+    return () => {
+      window.removeEventListener("pagehide", onLeave);
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -49,6 +103,15 @@ export function LandingNav() {
         <Link
           href="/"
           aria-label="PropDesk home"
+          onClick={(event) => {
+            // Already on the landing page: Next.js would do nothing, so
+            // jump to the top and replay the intro instead.
+            if (window.location.pathname === "/") {
+              event.preventDefault();
+              setOpen(false);
+              restartPage();
+            }
+          }}
           className="flex items-center gap-2 text-lg font-bold tracking-tight text-neutral-950"
         >
           <BrandMark />
@@ -60,6 +123,7 @@ export function LandingNav() {
             <li key={link.href}>
               <a
                 href={link.href}
+                onClick={(event) => scrollToSection(event, link.href)}
                 className="transition-colors hover:text-neutral-950"
               >
                 {link.label}
@@ -101,7 +165,10 @@ export function LandingNav() {
             <li key={link.href}>
               <a
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={(event) => {
+                  setOpen(false);
+                  scrollToSection(event, link.href);
+                }}
                 className="flex min-h-12 items-center text-lg font-medium text-neutral-950"
               >
                 {link.label}

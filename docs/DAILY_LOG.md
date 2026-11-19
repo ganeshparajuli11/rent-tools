@@ -818,3 +818,163 @@ Needs a human:
   Cells that start with `=`, `+`, `-`, `@` are made safe for spreadsheets.
   Removing details cannot be undone, which clashes with the Undo rule (see
   decisions).
+
+### Result
+
+**Both tasks done. Pushed to `main`** (fast-forwarded to a commit that
+passed every CI check on `auto/2026-11-19`). Items 6, 7 and 8 are ticked.
+Issue #8 is closed.
+
+**Task 1 — Unblock yesterday's build (items 6 and 7): done.**
+
+- GHSA-fc5q-39xc-vjpf (picomatch) is now rated moderate in the advisory
+  database, so `pnpm audit --audit-level=high` passes without any ignore
+  rule. Nothing about the audit was changed or loosened.
+- `auto/2026-11-18` was rebased onto `main` as `auto/2026-11-19`. Two
+  conflicts, both text: `docs/PENDING_MIGRATIONS.md` (all four migrations
+  kept, in date order) and `README.md` (the late rent email section and
+  `EMAIL_FROM` kept beside the new photos, demo account and
+  `ENABLE_TEST_LOGIN` sections).
+- The server action guard written yesterday did not know about what `main`
+  gained since. It now also checks named action files (`photo-actions.ts`,
+  whose three actions pass Zod, `runAction`, organisation and audit checks),
+  knows the test-only password sign-in (rate limited and validated), and
+  has one named exemption with its reason: `photos.preparePhotoUpload` only
+  picks a Storage path and writes nothing, so it has no `audit_log` row.
+- The late rent email and the security hardening from yesterday are now on
+  `main` unchanged.
+
+**Task 2 — Data rights (item 8): done.**
+
+- Settings has a "Download your data" section (owners only) with three
+  downloads: homes (with rooms in use and the current owner), tenants (now
+  and past, with rent, deposit and dates) and payments (with the month,
+  tenant, home and room, and whether it was removed). The download route
+  (`GET /api/export?data=…`) checks the session, rate limits (10 per 10 minutes
+  per user), validates `data` with Zod, allows owners only, reads with the
+  user's own client and writes a `data.exported` audit row (file and row
+  count only). Problems go back to Settings with a plain message.
+- CSV files: every cell quoted; cells starting with `=`, `+`, `-`, `@`, tab
+  or carriage return are written as text so a spreadsheet never runs them;
+  money is pounds with two decimals from integer pence; UTF-8 with a byte
+  order mark so Excel shows accents; one file is read in pages of 1,000 and
+  stops with a message above 100,000 rows.
+- A moved-out tenant's page has "Their personal details" (owners only):
+  "Remove their personal details" opens a short explanation on the page,
+  and "Yes, remove their details" removes their name (shown as "Former
+  tenant (details removed)" from then on), phone, email and every note on
+  their payments. Rent charges and payment amounts stay. After that the
+  page hides "Edit tenant" and "They have not moved out", and the server
+  refuses to make them a current tenant again. Audited as
+  `tenant.personal_details_removed` with which kinds of detail were
+  removed, never the details.
+- Tests: unit tests for CSV escaping, pounds, file names, the export
+  columns and the two schemas; the guard test now covers the new action and
+  checks the export route's session check, Zod, rate limit order, owner
+  check and audit; isolation cases (A's downloads never include B's data,
+  A cannot remove B's tenant's details, and a positive control that checks
+  what is removed and kept); a Playwright journey at phone and desktop
+  widths (`e2e/data-rights.spec.ts`: download, remove with keyboard,
+  download again).
+
+Checks (`pnpm install` still cannot run here; every check ran in GitHub
+Actions on `auto/2026-11-19`, runs 35 and 36, both passed first time):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Local stand-ins before pushing: the guard tests, CSV, export column, rent
+and validation tests ran here with a small stand-in for Vitest (the
+validation ones against a Zod 4 copy); Prettier 3.8 (without the Tailwind
+plugin) on every changed file; Tailwind 4.3.3's own class order on every
+changed component.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `sb_publishable_` values, `service_role`, `re_` keys, private keys and
+  JWT-shaped strings). The only `.env.example` change is yesterday's empty
+  `EMAIL_FROM=`.
+- No new `NEXT_PUBLIC_` variable. No new use of the service-role client;
+  the export route and the new action use the user's own client, and the
+  service-client guard test still lists only the two cron routes.
+- One new server action (`removeTenantDetailsAction`): Zod (with an
+  explicit `confirm: true`), `runAction` (session and rate limit),
+  organisation from memberships, owner check, `audit_log`. One new route
+  handler (`/api/export`): session, rate limit, Zod, organisation, owner
+  check, `audit_log`. It is not a public path, so the proxy also sends
+  signed-out visitors to sign-in.
+- No raw SQL, no `dangerouslySetInnerHTML`. The download file name is
+  built only from the checked file kind and today's date. The message on
+  Settings is chosen from our own list; anything else in the address is
+  ignored. Errors shown to people are plain; logs carry error codes only.
+- No migration today, so no new table and no policy change. Nothing was
+  weakened: the guard gained checks and one reasoned exemption for a
+  function that writes nothing.
+
+Pending migrations: none new today. Still waiting (see
+`docs/PENDING_MIGRATIONS.md`): `20261116030000_one_current_tenant_per_place`,
+`20261117030000_payments_removed_at`, `20261118030000_overdue_email_setting`
+and `20261119000000_property_photos`.
+
+Decisions made without asking:
+
+- Yesterday's blocked work was merged once the audit passed on its own. No
+  audit ignore rule was added.
+- Downloads and removing details are for owners only. Staff can still see
+  everything in the app, but a whole-account copy of personal data, or a
+  change that cannot be undone, is the owner's call.
+- Removing details is the one action in the app without Undo, because
+  there is nothing left to put back. Instead of a pop-up dialog, the first
+  tap opens a short explanation in the page and a second, clearly worded
+  button does it. It only works for tenants who have moved out.
+- Removed details are marked by the tenant's name becoming "Former tenant
+  (details removed)" with no phone or email, rather than by a new column.
+  This needs no migration (four are already waiting). A real column would
+  be cleaner; it fits item 11 or 14.
+- Payment notes are cleared too, because people write names in them. The
+  audit log needed nothing: it has never stored names, phone numbers or
+  emails.
+- Rent charges and payment amounts are kept after removal, for the
+  landlord's accounts. Whether that is enough for a given request is a
+  legal question (see below).
+- The homes file shows each home's current owner only (the same rule as the
+  home page), and rooms in use only.
+- Downloads are plain links, not buttons that run code, so they work on
+  every phone and without JavaScript.
+- `isOwner` moved from `settings.ts` to `context.ts` as
+  `isOrganisationOwner`, so settings, downloads and the tenant page share it.
+- No new dependencies.
+
+Needs a human:
+
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally**, and look at Settings
+  and a past tenant's page at 375, 768 and 1440px. Open a downloaded file in
+  Excel or Google Sheets once.
+- **Apply the four pending migrations** (review them first). The photos one
+  is needed before deploying `main`.
+- **Legal check on "remove personal details":** keeping rent amounts and
+  dates without a name is a common approach to an erasure request while
+  keeping accounts, but please confirm it with someone who knows UK GDPR.
+- **Note on `main`'s photos commit (not changed today):** "Remove photo"
+  deletes the row and the file instead of archiving with Undo, which the
+  project rules ask for. Decide whether that is intended.
+- **Turn on the late rent email** (from yesterday): verify a sending domain
+  in Resend, set `RESEND_API_KEY`, `EMAIL_FROM` and `CRON_SECRET` in Vercel,
+  redeploy.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Fifth day.
+- Delete the merged branches `auto/2026-11-15` to `auto/2026-11-19` and the
+  probe branch `auto/2026-11-18-format-probe` (this environment cannot
+  delete branches). None of them is a blocked build.
+- Dependabot pull requests are still open, including the grouped
+  minor-and-patch one (#9), which passed CI.

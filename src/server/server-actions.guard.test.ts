@@ -84,13 +84,26 @@ const SIGN_IN_ACTIONS: Record<string, "input" | "no-input"> = {
   requestSignInCode: "input",
   verifySignInCode: "input",
   resendSignInCode: "no-input",
+  signInWithTestPassword: "input",
   signOut: "no-input",
+};
+
+/**
+ * Data functions that an action may call without writing `audit_log`,
+ * because they change nothing. Each still derives the organisation.
+ * Reviewed by hand: add to this list only with a reason.
+ */
+const NO_AUDIT_DATA_FUNCTIONS: Record<string, string> = {
+  // Only works out a Storage path for the browser to upload to; the photo
+  // row (and its audit_log entry) is written later by photos.addPhoto.
+  "photos.preparePhotoUpload": "writes nothing",
 };
 
 const files = sourceFiles();
 const byPath = new Map(files.map((file) => [file.path, file]));
+// `actions.ts`, or a named one such as `photo-actions.ts`.
 const actionFiles = files.filter((file) =>
-  /(^|\/)actions\.ts$/.test(file.path),
+  /(^|\/)([\w-]+-)?actions\.ts$/.test(file.path),
 );
 const appActionFiles = actionFiles.filter((file) =>
   file.path.startsWith("app/(app)/"),
@@ -102,6 +115,7 @@ describe("server actions", () => {
     expect(appActionFiles.map((f) => f.path).sort()).toEqual(
       expect.arrayContaining([
         "app/(app)/homes/actions.ts",
+        "app/(app)/homes/photo-actions.ts",
         "app/(app)/rent/actions.ts",
         "app/(app)/settings/actions.ts",
         "app/(app)/tenants/actions.ts",
@@ -163,6 +177,7 @@ describe("server actions", () => {
           expect(dataBody, `${alias}.${fn}`).toMatch(
             /getOrganisationId\(ctx\)/,
           );
+          if (NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]) continue;
           expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
         }
       },

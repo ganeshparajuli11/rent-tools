@@ -3,6 +3,7 @@ import "server-only";
 import {
   type Ctx,
   getOrganisationId,
+  isOrganisationOwner as isOwner,
   NOT_FOUND,
   UserFacingError,
   writeAudit,
@@ -37,17 +38,6 @@ function isMissingColumn(error: unknown): boolean {
       ? (error as { code?: unknown }).code
       : undefined;
   return code === "42703" || code === "PGRST204";
-}
-
-async function isOwner(ctx: Ctx, organisationId: string): Promise<boolean> {
-  const { data, error } = await ctx.supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", ctx.userId)
-    .eq("organisation_id", organisationId)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.role === "owner";
 }
 
 export async function getOverdueEmailSettings(

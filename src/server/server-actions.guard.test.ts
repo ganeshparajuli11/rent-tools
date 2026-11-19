@@ -218,9 +218,30 @@ describe("route handlers", () => {
       expect.arrayContaining([
         "app/api/cron/overdue-reminders/route.ts",
         "app/api/cron/rent-charges/route.ts",
+        "app/api/export/route.ts",
         "app/auth/confirm/route.ts",
       ]),
     );
+  });
+
+  it("the data download checks the session, validates, and is owners only", () => {
+    const route = byPath.get("app/api/export/route.ts")!.text;
+    expect(route).toMatch(/getCurrentUser\(\)/);
+    expect(route).toMatch(/if \(!user\) redirect\(/);
+    expect(route).toMatch(/exportKindSchema\.safeParse\(/);
+    // The rate limit comes before any data is read.
+    expect(route.indexOf("rateLimit(")).toBeLessThan(
+      route.indexOf("exportData("),
+    );
+    expect(route).not.toMatch(/service/i);
+
+    const data = functionBody(
+      byPath.get("server/data-export.ts")!.text,
+      "exportData",
+    );
+    expect(data).toMatch(/getOrganisationId\(ctx\)/);
+    expect(data).toMatch(/isOrganisationOwner\(ctx, organisationId\)/);
+    expect(data).toMatch(/writeAudit\(ctx,/);
   });
 
   it.each(routeFiles.map((file): [string, SourceFile] => [file.path, file]))(

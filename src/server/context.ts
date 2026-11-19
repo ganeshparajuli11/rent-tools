@@ -43,6 +43,21 @@ export async function getOrganisationId(ctx: Ctx): Promise<string> {
   return data.organisation_id;
 }
 
+/** True when the user is an owner (not staff) of this organisation. */
+export async function isOrganisationOwner(
+  ctx: Ctx,
+  organisationId: string,
+): Promise<boolean> {
+  const { data, error } = await ctx.supabase
+    .from("memberships")
+    .select("role")
+    .eq("user_id", ctx.userId)
+    .eq("organisation_id", organisationId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.role === "owner";
+}
+
 /**
  * Writes an audit_log row. A failure here is logged but does not undo or
  * fail the change the user just made.

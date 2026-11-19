@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { DataDownloads } from "@/components/settings/data-downloads";
 import { OverdueEmailSwitch } from "@/components/settings/overdue-email-switch";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/server/auth";
@@ -7,9 +8,15 @@ import { getOverdueEmailSettings, NOT_READY } from "@/server/settings";
 
 export const metadata: Metadata = { title: "Settings" };
 
-/** Settings for the account. For now: the daily late rent email. */
-export default async function SettingsPage() {
+/** Settings for the account: the daily late rent email and data downloads. */
+export default async function SettingsPage({
+  searchParams,
+}: PageProps<"/settings">) {
   const user = await requireUser();
+  const params = await searchParams;
+  // Set by /api/export when a download could not be made.
+  const exportProblem =
+    typeof params.export === "string" ? params.export : undefined;
   const supabase = await createClient();
   const settings = await getOverdueEmailSettings({
     supabase,
@@ -42,6 +49,8 @@ export default async function SettingsPage() {
           Emails go to the email address you sign in with: {user.email}
         </p>
       ) : null}
+
+      {settings.isOwner ? <DataDownloads problem={exportProblem} /> : null}
     </section>
   );
 }

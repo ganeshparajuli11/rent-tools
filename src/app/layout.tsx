@@ -17,10 +17,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "RentDesk",
-    template: "%s | RentDesk",
+    default: "PropDesk",
+    template: "%s | PropDesk",
   },
-  description: "Simple rent and property management for small UK landlords.",
+  description:
+    "Property management for UK landlords and letting managers: homes, owners, tenants, rent and repairs.",
 };
 
 export const viewport: Viewport = {

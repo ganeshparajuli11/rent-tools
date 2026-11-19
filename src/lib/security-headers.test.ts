@@ -56,12 +56,13 @@ describe("contentSecurityPolicy (production)", () => {
     ]);
   });
 
-  it("shows images from this site and the Supabase project only", () => {
+  it("shows images from this site, the Supabase project and Unsplash only", () => {
     expect(policy.get("img-src")).toEqual([
       "'self'",
       "data:",
       "blob:",
       SUPABASE,
+      "https://images.unsplash.com",
     ]);
   });
 

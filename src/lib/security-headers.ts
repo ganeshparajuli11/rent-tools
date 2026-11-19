@@ -11,10 +11,14 @@
  *    changing the base URL, and forms only post back to this site.
  *  - the Supabase project URL, for connect-src (and its websocket) and for
  *    img-src, because home photos are shown from Supabase Storage with
- *    signed links.
+ *    signed links. img-src also allows Unsplash's image CDN for the
+ *    landing page photos.
  *  - in development only: 'unsafe-eval' (React's dev tools) and websockets
  *    for hot reload.
  */
+
+/** Unsplash's image CDN, for the landing page photos. */
+export const UNSPLASH_IMAGES = "https://images.unsplash.com";
 
 export type SecurityHeader = { key: string; value: string };
 
@@ -48,8 +52,10 @@ export function contentSecurityPolicy({
   if (isDevelopment) connect.push("ws:", "wss:");
 
   // Home photos are private Storage files shown through signed links.
+  // The landing page's free stock photos come from Unsplash's image CDN.
   const img = ["'self'", "data:", "blob:"];
   if (supabase) img.push(supabase);
+  img.push(UNSPLASH_IMAGES);
 
   const script = ["'self'", "'unsafe-inline'"];
   if (isDevelopment) script.push("'unsafe-eval'");

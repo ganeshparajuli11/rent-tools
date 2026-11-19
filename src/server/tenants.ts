@@ -1,11 +1,16 @@
 import "server-only";
 
 import { laterDate, todayInLondon } from "@/lib/dates";
+import {
+  hasRemovedDetails,
+  REMOVED_TENANT_NAME,
+} from "@/lib/validation/data-rights";
 import type { TenantPlace, TenantValues } from "@/lib/validation/tenants";
 
 import {
   type Ctx,
   getOrganisationId,
+  isOrganisationOwner,
   NOT_FOUND,
   UserFacingError,
   writeAudit,
@@ -41,6 +46,7 @@ const UNIQUE_VIOLATION = "23505";
 
 export type TenantDetail = {
   id: string;
+  organisationId: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -105,6 +111,7 @@ export async function getTenant(
 
   return {
     id: data.id,
+    organisationId,
     name: data.tenant_name,
     phone: data.tenant_phone,
     email: data.tenant_email,
@@ -384,6 +391,11 @@ export async function undoMoveTenantOut(ctx: Ctx, id: string) {
     // Already current: nothing to undo.
     return { name: before.tenant_name, homeId: before.property_id };
   }
+  if (before.tenant_name === REMOVED_TENANT_NAME) {
+    throw new UserFacingError(
+      "Their details have been removed, so they cannot move back in. Add them as a new tenant instead.",
+    );
+  }
 
   const taken = await placeIsTaken(
     ctx,
@@ -433,4 +445,112 @@ export async function undoMoveTenantOut(ctx: Ctx, id: string) {
   });
 
   return { name: before.tenant_name, homeId: before.property_id };
+}
+
+// ---------------------------------------------------------------------------
+// Data rights: removing a past tenant's personal details
+// ---------------------------------------------------------------------------
+
+/**
+ * Removes a past tenant's personal details: their name (replaced by
+ * REMOVED_TENANT_NAME), phone number, email address, and any notes on
+ * their payments. Rent charges and payment amounts are kept, because the
+ * landlord needs them for their accounts; without a name they no longer
+ * say who the person was.
+ *
+ * Only owners can do this, and only for a tenant who has moved out. It
+ * cannot be undone, which is why the browser must confirm it first (see
+ * removeTenantDetailsSchema). The audit log never held these details (see
+ * the top of this file), so there is nothing to remove there.
+ */
+export async function removeTenantDetails(
+  ctx: Ctx,
+  id: string,
+): Promise<{ homeId: string; alreadyRemoved: boolean }> {
+  const organisationId = await getOrganisationId(ctx);
+  if (!(await isOrganisationOwner(ctx, organisationId))) {
+    throw new UserFacingError(
+      "Only the account owner can remove a tenant's details.",
+    );
+  }
+
+  const { data: before, error: readError } = await ctx.supabase
+    .from("tenancies")
+    .select("property_id, tenant_name, tenant_phone, tenant_email, end_date")
+    .eq("id", id)
+    .eq("organisation_id", organisationId)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!before) throw new UserFacingError(NOT_FOUND);
+  if (before.end_date === null) {
+    throw new UserFacingError(
+      "You can only remove the details of a tenant who has moved out. Mark them as moved out first.",
+    );
+  }
+
+  // Payment notes first: if this fails, nothing has been changed yet.
+  const { data: charges, error: chargesError } = await ctx.supabase
+    .from("rent_charges")
+    .select("id")
+    .eq("tenancy_id", id)
+    .eq("organisation_id", organisationId);
+  if (chargesError) throw chargesError;
+
+  let paymentNotesCleared = 0;
+  const chargeIds = charges.map((charge) => charge.id);
+  // In batches, so a tenant of many years never makes an over-long request.
+  for (let i = 0; i < chargeIds.length; i += 200) {
+    const { data: cleared, error: notesError } = await ctx.supabase
+      .from("payments")
+      .update({ note: null })
+      .eq("organisation_id", organisationId)
+      .in("rent_charge_id", chargeIds.slice(i, i + 200))
+      .not("note", "is", null)
+      .select("id");
+    if (notesError) throw notesError;
+    paymentNotesCleared += cleared.length;
+  }
+
+  const alreadyRemoved =
+    paymentNotesCleared === 0 &&
+    hasRemovedDetails({
+      name: before.tenant_name,
+      phone: before.tenant_phone,
+      email: before.tenant_email,
+    });
+  if (alreadyRemoved) {
+    return { homeId: before.property_id, alreadyRemoved: true };
+  }
+
+  const { data: updated, error } = await ctx.supabase
+    .from("tenancies")
+    .update({
+      tenant_name: REMOVED_TENANT_NAME,
+      tenant_phone: null,
+      tenant_email: null,
+    })
+    .eq("id", id)
+    .eq("organisation_id", organisationId)
+    .not("end_date", "is", null)
+    .select("id");
+  if (error) throw error;
+  if (!updated.length) throw new UserFacingError(NOT_FOUND);
+
+  // Which kinds of detail were removed, never the details themselves.
+  await writeAudit(ctx, {
+    organisationId,
+    action: "tenant.personal_details_removed",
+    table: "tenancies",
+    recordId: id,
+    changes: {
+      removed: {
+        name: before.tenant_name !== REMOVED_TENANT_NAME,
+        phone: before.tenant_phone !== null,
+        email: before.tenant_email !== null,
+        paymentNotes: paymentNotesCleared,
+      },
+    },
+  });
+
+  return { homeId: before.property_id, alreadyRemoved: false };
 }

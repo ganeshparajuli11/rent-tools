@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import type { ActionResult } from "@/lib/action-result";
+import { removeTenantDetailsSchema } from "@/lib/validation/data-rights";
 import { idSchema } from "@/lib/validation/homes";
 import { tenantPlaceSchema, tenantSchema } from "@/lib/validation/tenants";
 import { invalidInput, runAction } from "@/server/run-action";
@@ -89,4 +90,27 @@ export async function undoMoveTenantOutAction(
   if (!result.ok) return result;
   refresh(result.data.homeId, tenantId.data);
   return { ok: true, data: { name: result.data.name } };
+}
+
+/**
+ * Removes a past tenant's personal details for good (owners only). There is
+ * no Undo, so the browser must send `confirm: true`.
+ */
+export async function removeTenantDetailsAction(
+  input: unknown,
+): Promise<ActionResult<{ alreadyRemoved: boolean }>> {
+  const parsed = removeTenantDetailsSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? TENANT_NOT_FOUND,
+    };
+  }
+
+  const result = await runAction("tenants", "removeTenantDetails", (ctx) =>
+    tenants.removeTenantDetails(ctx, parsed.data.tenantId),
+  );
+  if (!result.ok) return result;
+  refresh(result.data.homeId, parsed.data.tenantId);
+  return { ok: true, data: { alreadyRemoved: result.data.alreadyRemoved } };
 }

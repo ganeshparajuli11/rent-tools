@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { RemoveTenantDetails } from "@/components/tenants/remove-tenant-details";
 import {
   MoveOutButton,
   UndoMoveOutButton,
@@ -12,8 +13,10 @@ import { formatDate, ordinal } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import { hasRemovedDetails } from "@/lib/validation/data-rights";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { isOrganisationOwner } from "@/server/context";
 import { getTenant } from "@/server/tenants";
 
 export const metadata: Metadata = { title: "Tenant" };
@@ -26,10 +29,17 @@ export default async function TenantPage({
   if (!idSchema.safeParse(id).success) notFound();
 
   const supabase = await createClient();
-  const tenant = await getTenant({ supabase, userId: user.id }, id);
+  const ctx = { supabase, userId: user.id };
+  const tenant = await getTenant(ctx, id);
   if (!tenant) notFound();
 
   const movedOut = tenant.endDate !== null;
+  const detailsRemoved = hasRemovedDetails(tenant);
+  // Only owners can remove details; only asked once the tenant has moved out.
+  const canRemoveDetails =
+    movedOut &&
+    !detailsRemoved &&
+    (await isOrganisationOwner(ctx, tenant.organisationId));
   const place = tenant.room
     ? `${tenant.room.name}, ${tenant.home.name}`
     : tenant.home.name;
@@ -52,7 +62,14 @@ export default async function TenantPage({
           <p className="text-base font-medium">
             This tenant moved out on {formatDate(tenant.endDate)}.
           </p>
-          <UndoMoveOutButton tenantId={tenant.id} />
+          {detailsRemoved ? (
+            <p className="text-base text-muted-foreground">
+              Their personal details have been removed. Their rent and payments
+              are kept.
+            </p>
+          ) : (
+            <UndoMoveOutButton tenantId={tenant.id} />
+          )}
         </div>
       ) : null}
 
@@ -61,16 +78,18 @@ export default async function TenantPage({
           <h1 className="text-2xl font-semibold break-words">{tenant.name}</h1>
           <p className="text-base text-muted-foreground">{place}</p>
         </div>
-        <Link
-          href={`/tenants/${tenant.id}/edit`}
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "h-12 gap-2 px-6 text-base sm:self-start",
-          )}
-        >
-          <PencilIcon aria-hidden="true" className="size-5" />
-          Edit tenant
-        </Link>
+        {detailsRemoved ? null : (
+          <Link
+            href={`/tenants/${tenant.id}/edit`}
+            className={cn(
+              buttonVariants({ size: "lg" }),
+              "h-12 gap-2 px-6 text-base sm:self-start",
+            )}
+          >
+            <PencilIcon aria-hidden="true" className="size-5" />
+            Edit tenant
+          </Link>
+        )}
       </header>
 
       <section aria-labelledby="rent-heading" className="flex flex-col gap-2">
@@ -146,6 +165,22 @@ export default async function TenantPage({
       {!movedOut ? (
         <section className="border-t pt-6">
           <MoveOutButton tenantId={tenant.id} tenantName={tenant.name} />
+        </section>
+      ) : null}
+
+      {canRemoveDetails ? (
+        <section
+          aria-labelledby="privacy-heading"
+          className="flex flex-col gap-3 border-t pt-6"
+        >
+          <h2 id="privacy-heading" className="text-xl font-semibold">
+            Their personal details
+          </h2>
+          <p className="max-w-xl text-base text-muted-foreground">
+            If {tenant.name} asks you to delete their details, you can remove
+            them here. Their rent and payments stay for your accounts.
+          </p>
+          <RemoveTenantDetails tenantId={tenant.id} tenantName={tenant.name} />
         </section>
       ) : null}
     </article>

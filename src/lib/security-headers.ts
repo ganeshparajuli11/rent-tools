@@ -9,7 +9,9 @@
  *    testing in a real browser, so it is a later step. Everything else is
  *    still locked down: no plugins, no other sites' scripts, no framing, no
  *    changing the base URL, and forms only post back to this site.
- *  - the Supabase project URL, for connect-src (and its websocket).
+ *  - the Supabase project URL, for connect-src (and its websocket) and for
+ *    img-src, because home photos are shown from Supabase Storage with
+ *    signed links.
  *  - in development only: 'unsafe-eval' (React's dev tools) and websockets
  *    for hot reload.
  */
@@ -45,6 +47,10 @@ export function contentSecurityPolicy({
   if (supabaseSocket) connect.push(supabaseSocket);
   if (isDevelopment) connect.push("ws:", "wss:");
 
+  // Home photos are private Storage files shown through signed links.
+  const img = ["'self'", "data:", "blob:"];
+  if (supabase) img.push(supabase);
+
   const script = ["'self'", "'unsafe-inline'"];
   if (isDevelopment) script.push("'unsafe-eval'");
 
@@ -52,7 +58,7 @@ export function contentSecurityPolicy({
     ["default-src", ["'self'"]],
     ["script-src", script],
     ["style-src", ["'self'", "'unsafe-inline'"]],
-    ["img-src", ["'self'", "data:", "blob:"]],
+    ["img-src", img],
     ["font-src", ["'self'", "data:"]],
     ["connect-src", connect],
     ["object-src", ["'none'"]],

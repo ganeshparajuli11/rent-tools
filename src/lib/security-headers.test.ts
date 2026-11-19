@@ -56,6 +56,15 @@ describe("contentSecurityPolicy (production)", () => {
     ]);
   });
 
+  it("shows images from this site and the Supabase project only", () => {
+    expect(policy.get("img-src")).toEqual([
+      "'self'",
+      "data:",
+      "blob:",
+      SUPABASE,
+    ]);
+  });
+
   it("upgrades http to https", () => {
     expect(policy.has("upgrade-insecure-requests")).toBe(true);
   });

@@ -21,12 +21,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { REMOVED_TENANT_NAME } from "@/lib/validation/data-rights";
 import type { UpdateHomeValues } from "@/lib/validation/homes";
 import type { TenantValues } from "@/lib/validation/tenants";
 import { todayInLondon } from "@/lib/dates";
 import { addMonths, monthOf, monthStart } from "@/lib/rent";
 import { type Ctx, UserFacingError } from "@/server/context";
 import { getDashboard } from "@/server/dashboard";
+import { exportData } from "@/server/data-export";
 import * as homes from "@/server/homes";
 import * as rent from "@/server/rent";
 import type { EmailMessage } from "@/server/email";
@@ -1083,5 +1085,149 @@ describe("settings and the late rent email: user A cannot see or change B's", ()
     expect(off.counts["turned-off"]).toBe(1);
     expect(sent).toHaveLength(0);
     await settings.setOverdueEmailEnabled(ctxOf(a), true);
+  });
+});
+
+describe("data rights: downloads and removing a tenant's details stay inside each organisation", () => {
+  const ctxOf = (user: TestUser): Ctx => ({
+    supabase: user.client as unknown as SupabaseClient<Database>,
+    userId: user.userId,
+  });
+
+  it("A's downloads hold only A's homes, tenants and payments, and are audited", async () => {
+    const homesCsv = (await exportData(ctxOf(a), "homes")).csv;
+    expect(homesCsv).toContain("Test house A");
+    expect(homesCsv).toContain("Owner A");
+    expect(homesCsv).not.toContain("Test house B");
+    expect(homesCsv).not.toContain("Owner B");
+
+    const tenantsCsv = (await exportData(ctxOf(a), "tenants")).csv;
+    expect(tenantsCsv).toContain("Tenant A");
+    expect(tenantsCsv).not.toContain("Tenant B");
+
+    const payments = await exportData(ctxOf(a), "payments");
+    expect(payments.rows).toBeGreaterThan(0);
+    expect(payments.csv).not.toContain("Tenant B");
+
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("table_name, record_id, changes")
+      .eq("action", "data.exported");
+    expect(audit?.map((row) => row.table_name).sort()).toEqual([
+      "payments",
+      "properties",
+      "tenancies",
+    ]);
+    // The audit row says what was downloaded, never the data itself.
+    expect(JSON.stringify(audit)).not.toContain("Tenant A");
+  });
+
+  it("A cannot remove the details of B's tenant", async () => {
+    const before = await admin
+      .from("tenancies")
+      .select("tenant_name, tenant_phone, tenant_email")
+      .eq("id", b.ids.tenancies)
+      .single();
+
+    await expect(
+      tenants.removeTenantDetails(ctxOf(a), b.ids.tenancies),
+    ).rejects.toBeInstanceOf(UserFacingError);
+
+    const after = await admin
+      .from("tenancies")
+      .select("tenant_name, tenant_phone, tenant_email")
+      .eq("id", b.ids.tenancies)
+      .single();
+    expect(after.data).toEqual(before.data);
+  });
+
+  it("removes a past tenant's details but keeps their rent (positive control)", async () => {
+    const ctx = ctxOf(a);
+
+    // A current tenant cannot have their details removed.
+    await expect(
+      tenants.removeTenantDetails(ctx, a.ids.tenancies),
+    ).rejects.toBeInstanceOf(UserFacingError);
+
+    const past = must<{ id: string }>(
+      await a.client
+        .from("tenancies")
+        .insert({
+          organisation_id: a.orgId,
+          property_id: a.ids.properties,
+          tenant_name: "Past Tenant A",
+          tenant_phone: "07700 900999",
+          tenant_email: "past-a@example.com",
+          rent_pence: 40_000,
+          due_day: 1,
+          start_date: "2026-02-01",
+          end_date: "2026-03-31",
+        })
+        .select("id")
+        .single(),
+      "insert past tenancy",
+    ).id;
+    const charge = must<{ id: string }>(
+      await a.client
+        .from("rent_charges")
+        .insert({
+          organisation_id: a.orgId,
+          tenancy_id: past,
+          period_start: "2026-02-01",
+          due_date: "2026-02-01",
+          amount_pence: 40_000,
+        })
+        .select("id")
+        .single(),
+      "insert past charge",
+    ).id;
+    await a.client.from("payments").insert({
+      organisation_id: a.orgId,
+      rent_charge_id: charge,
+      amount_pence: 40_000,
+      note: "Paid by Past Tenant A's mum",
+    });
+
+    expect(await tenants.removeTenantDetails(ctx, past)).toMatchObject({
+      alreadyRemoved: false,
+    });
+
+    const { data: tenancy } = await admin
+      .from("tenancies")
+      .select("tenant_name, tenant_phone, tenant_email, rent_pence, end_date")
+      .eq("id", past)
+      .single();
+    expect(tenancy).toEqual({
+      tenant_name: REMOVED_TENANT_NAME,
+      tenant_phone: null,
+      tenant_email: null,
+      rent_pence: 40_000,
+      end_date: "2026-03-31",
+    });
+
+    const { data: kept } = await admin
+      .from("payments")
+      .select("amount_pence, note")
+      .eq("rent_charge_id", charge);
+    expect(kept).toEqual([{ amount_pence: 40_000, note: null }]);
+
+    // A second time changes nothing and says so.
+    expect(await tenants.removeTenantDetails(ctx, past)).toMatchObject({
+      alreadyRemoved: true,
+    });
+
+    // They cannot be brought back as a current tenant.
+    await expect(tenants.undoMoveTenantOut(ctx, past)).rejects.toBeInstanceOf(
+      UserFacingError,
+    );
+
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("changes")
+      .eq("action", "tenant.personal_details_removed")
+      .eq("record_id", past);
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit)).not.toContain("Past Tenant A");
+    expect(JSON.stringify(audit)).not.toContain("07700 900999");
   });
 });

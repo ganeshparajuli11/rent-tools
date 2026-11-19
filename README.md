@@ -294,6 +294,28 @@ it again to reset it. It only ever touches the demo account.
   has `ENABLE_TEST_LOGIN=true`, and it only accepts the demo email.
 - **Remove `ENABLE_TEST_LOGIN` before real landlords use the app.**
 
+## Data rights
+
+Owners can download their data and remove a past tenant's personal details.
+
+- **Downloads** (Settings, "Download your data"): `GET /api/export?data=homes`,
+  `tenants` or `payments` returns a CSV file. Owners only; staff do not see
+  the links and are refused. Each download checks the session, is rate
+  limited (10 per 10 minutes per user), reads with the user's own client
+  (RLS applies) and writes an `audit_log` row (`data.exported`: which file
+  and how many rows, never the data). Money is pounds with two decimals,
+  dates are `YYYY-MM-DD`. Cells that a spreadsheet would run as a formula
+  (starting with `=`, `+`, `-` or `@`) are written as text. A problem sends
+  the person back to Settings with a plain message.
+- **Removing a tenant's details** (tenant page, "Their personal details"):
+  for a tenant who has moved out, an owner can remove their name (it becomes
+  "Former tenant (details removed)"), phone number, email address and any
+  notes on their payments. Rent charges and payment amounts stay, so totals
+  do not change. It cannot be undone, so it is the one place in the app
+  that asks first: on the page, not in a pop-up. Written to `audit_log`
+  (`tenant.personal_details_removed`, which kinds of detail, never the
+  details). The audit log never stores names, phone numbers or emails.
+
 ## Data model and security
 
 - Every business table has `organisation_id`. A user sees a row only if they

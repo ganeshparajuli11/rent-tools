@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addYears,
   formatDate,
+  formatDateUK,
   isValidDateString,
   laterDate,
   ordinal,
@@ -90,6 +91,26 @@ describe("formatDate", () => {
 
   it("returns the text unchanged when it is not a date", () => {
     expect(formatDate("soon")).toBe("soon");
+  });
+});
+
+describe("formatDateUK", () => {
+  it("writes a date as DD/MM/YYYY", () => {
+    expect(formatDateUK("2026-01-05")).toBe("05/01/2026");
+    expect(formatDateUK("2026-12-31")).toBe("31/12/2026");
+  });
+
+  it("shows a timestamp as its day in London", () => {
+    // 23:30 UTC in summer is already the next day in London.
+    expect(formatDateUK("2026-07-01T23:30:00Z")).toBe("02/07/2026");
+    // In winter London is on UTC.
+    expect(formatDateUK("2026-01-01T23:30:00Z")).toBe("01/01/2026");
+  });
+
+  it("leaves anything that is not a real date as it is", () => {
+    expect(formatDateUK("2026-02-30")).toBe("2026-02-30");
+    expect(formatDateUK("soon")).toBe("soon");
+    expect(formatDateUK("")).toBe("");
   });
 });
 

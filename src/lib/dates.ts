@@ -85,6 +85,27 @@ export function formatDate(value: string): string {
   );
 }
 
+/**
+ * "2026-01-05" -> "05/01/2026", the UK short date used in tables, forms and
+ * records (docs/DESIGN_SYSTEM.md §5). Also takes a full timestamp
+ * ("2026-01-05T23:30:00Z"), which is shown as its day in London.
+ * Anything that is not a real date is returned unchanged.
+ */
+export function formatDateUK(value: string): string {
+  const day = DATE_PATTERN.test(value) ? value : timestampDay(value);
+  if (!day || !isValidDateString(day)) return value;
+  const [year, month, date] = day.split("-");
+  return `${date}/${month}/${year}`;
+}
+
+/** The London calendar day of an ISO timestamp, or null. */
+function timestampDay(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return null;
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return null;
+  return todayInLondon(time);
+}
+
 /** The later of two "YYYY-MM-DD" dates. */
 export function laterDate(a: string, b: string): string {
   return a >= b ? a : b;

@@ -46,41 +46,82 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* PropDesk tokens (docs/DESIGN_SYSTEM.md §1) as Tailwind colours:
+     bg-canvas, text-ink-2, bg-good-soft, text-bad and so on. */
+  --color-canvas: var(--pd-canvas);
+  --color-surface: var(--pd-surface);
+  --color-subtle: var(--pd-subtle);
+  --color-divider: var(--pd-divider);
+  --color-ink: var(--pd-ink);
+  --color-ink-2: var(--pd-ink-2);
+  --color-good: var(--pd-good);
+  --color-good-soft: var(--pd-good-soft);
+  --color-bad: var(--pd-bad);
+  --color-bad-soft: var(--pd-bad-soft);
+  --color-warn: var(--pd-warn);
+  --color-warn-soft: var(--pd-warn-soft);
+  --color-info: var(--pd-info);
+  --color-info-soft: var(--pd-info-soft);
+  --color-orange: var(--pd-orange);
+  --color-orange-soft: var(--pd-orange-soft);
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* PropDesk design tokens (docs/DESIGN_SYSTEM.md §1). Components use these
+     through Tailwind classes; never hard-code a new colour in a component. */
+  --pd-canvas: #f6f5f3;
+  --pd-surface: #ffffff;
+  --pd-subtle: #f5f5f4;
+  --pd-border: #e7e5e4;
+  --pd-divider: #f0efed;
+  --pd-ink: #0a0a0a;
+  --pd-ink-2: #44403c;
+  --pd-muted: #57534e;
+  --pd-good: #047857;
+  --pd-good-soft: #ecfdf5;
+  --pd-bad: #b91c1c;
+  --pd-bad-soft: #fef2f2;
+  --pd-warn: #b45309;
+  --pd-warn-soft: #fffbeb;
+  --pd-info: #1d4ed8;
+  --pd-info-soft: #eff6ff;
+  --pd-orange: #c2410c;
+  --pd-orange-soft: #fff7ed;
+
+  /* The shadcn variables, mapped onto the PropDesk tokens. */
+  --background: var(--pd-surface);
+  --foreground: var(--pd-ink);
+  --card: var(--pd-surface);
+  --card-foreground: var(--pd-ink);
+  --popover: var(--pd-surface);
+  --popover-foreground: var(--pd-ink);
+  --primary: var(--pd-ink);
+  --primary-foreground: var(--pd-surface);
+  --secondary: var(--pd-subtle);
+  --secondary-foreground: var(--pd-ink);
+  --muted: var(--pd-subtle);
+  --muted-foreground: var(--pd-muted);
+  --accent: var(--pd-subtle);
+  --accent-foreground: var(--pd-ink);
+  --destructive: var(--pd-bad);
+  --border: var(--pd-border);
+  --input: var(--pd-border);
+  --ring: var(--pd-muted);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: var(--pd-surface);
+  --sidebar-foreground: var(--pd-ink);
+  --sidebar-primary: var(--pd-ink);
+  --sidebar-primary-foreground: var(--pd-surface);
+  --sidebar-accent: var(--pd-subtle);
+  --sidebar-accent-foreground: var(--pd-ink);
+  --sidebar-border: var(--pd-border);
+  --sidebar-ring: var(--pd-muted);
 }
 
 .dark {
@@ -242,5 +283,13 @@
     filter: none;
     transform: none;
     transition: none;
+  }
+
+  /* The signed-in app: menus, dialogs and sheets appear without moving. */
+  .pd-app *,
+  .pd-app *::before,
+  .pd-app *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

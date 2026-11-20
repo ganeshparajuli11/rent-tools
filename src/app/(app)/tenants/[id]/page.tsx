@@ -9,7 +9,7 @@ import {
   UndoMoveOutButton,
 } from "@/components/tenants/tenant-move-out-buttons";
 import { buttonVariants } from "@/components/ui/button";
-import { formatDate, ordinal } from "@/lib/dates";
+import { formatDate, formatDateUK, ordinal } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -106,7 +106,7 @@ export default async function TenantPage({
           </div>
           <div>
             <dt className="text-muted-foreground">Moved in</dt>
-            <dd className="font-medium">{formatDate(tenant.startDate)}</dd>
+            <dd className="font-medium">{formatDateUK(tenant.startDate)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Deposit</dt>

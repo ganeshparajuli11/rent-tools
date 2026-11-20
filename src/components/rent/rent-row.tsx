@@ -16,7 +16,7 @@ import {
 } from "@/app/(app)/rent/actions";
 import { applyServerErrors, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/dates";
+import { formatDateUK } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
 import { formatDayAndMonth } from "@/lib/rent";
 import {
@@ -194,7 +194,7 @@ export function RentRowItem({
                   <span className="font-medium">
                     {formatPence(payment.amountPence)}
                   </span>{" "}
-                  recorded on {formatDate(payment.paidOn)}
+                  recorded on {formatDateUK(payment.paidOn)}
                 </span>
                 {canRemovePayments ? (
                   <Button

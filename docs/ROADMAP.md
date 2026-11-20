@@ -34,7 +34,7 @@ migration is applied.
 
 ## Phase A: design system and app shell
 
-- [ ] **A1 (L): Design tokens and app shell.** Implement `DESIGN_SYSTEM.md` §1
+- [x] **A1 (L): Design tokens and app shell.** Implement `DESIGN_SYSTEM.md` §1
       and §2: tokens in `globals.css`, Geist via `next/font`, the grouped
       sidebar (with links to pages that do not exist yet hidden, not broken),
       top bar with the search box (opens a ⌘K dialog that searches homes and

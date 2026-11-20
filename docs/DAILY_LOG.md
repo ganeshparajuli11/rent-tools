@@ -1037,3 +1037,114 @@ Today: **A1 (L) only**, since it is marked large. No decision blocks it.
   props must match the copies in `src/components/ui/`; the search action
   is read-only, so it does not write `audit_log` (a search term can be a
   person's name, which the audit log must never hold).
+
+### Results
+
+| Task                                | Status                    | Branch                         |
+| ----------------------------------- | ------------------------- | ------------------------------ |
+| A1 (L): Design tokens and app shell | Done                      | `main` (via `auto/2026-11-20`) |
+| A2 onwards                          | Not started (A1 is large) |                                |
+
+What A1 added:
+
+- Tokens: `--pd-*` variables in `globals.css`, exposed as Tailwind colours
+  (`bg-canvas`, `bg-subtle`, `text-ink`, `text-ink-2`, `text-bad`,
+  `bg-good-soft` and so on); the shadcn variables point at them. Geist was
+  already loaded with `next/font`.
+- Shell (`src/components/app/`): grouped sidebar 248px wide (Today;
+  Portfolio › Properties with a count of homes; Money › Rent; Account ›
+  Settings), organisation block, person block with role and Sign out; top
+  bar with the search box and **+ New** (Property only); phone top bar and
+  bottom bar (Today, Properties, Rent, More). The menu is defined once in
+  `src/lib/nav.ts`; Owners, Tenants, Tenancies, Reports, Repairs and
+  Contractors are listed there with `ready: false` and appear when their
+  pages are built.
+- ⌘K / Ctrl K search over homes (name, street, postcode) and tenants
+  (name), six of each, with ↑ ↓ and Enter.
+- `formatDateUK`, used for a tenant's move-in date and payment dates.
+- Content is left-aligned beside the sidebar, at most 1240px wide.
+
+Checks (`pnpm install` cannot run here; every check ran in GitHub Actions
+on `auto/2026-11-20`, run 44, passed first time):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Local stand-ins before pushing: the new nav, people, date and search tests
+ran here with a small stand-in for Vitest (search against a local Zod
+copy); Prettier 3.8 on every changed file; Tailwind 4.3.3's own class
+order on every changed component (139 class lists, no differences).
+Playwright screenshots at 375, 768 and 1440px could not be taken: the app
+cannot be built or run here.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, `re_` keys and private keys; the
+  only hit is the existing e2e skip message naming
+  `SUPABASE_SERVICE_ROLE_KEY`). No new `NEXT_PUBLIC_` variable and no
+  service-role client anywhere near the new code.
+- One new server action (`searchAction`): shared Zod schema, `runAction`
+  (session check, rate limit: its own 120 a minute, the user's own client
+  so RLS applies), organisation from memberships via `getOrganisationId`.
+  The guard test lists it, and `search.searchRecords` is on its reviewed
+  "no audit" list because it only reads. No new route handler.
+- No raw SQL. The search term goes into a PostgREST `or` filter for homes,
+  so the schema removes every character except letters, numbers, spaces
+  and `' . - &` (no commas, brackets, quotes, backslashes, `%` or `_`),
+  and the value is double-quoted; tests cover it. No
+  `dangerouslySetInnerHTML`. Errors shown are the existing plain messages.
+- The shell's data (memberships, organisation names, a count of homes)
+  is read with the user's own client. If it fails, pages still load
+  without the organisation block, and only an error code is logged.
+- No migration, so no new table or policy. Nothing weakened.
+
+Pending migrations: none new today. Still waiting (see
+`docs/PENDING_MIGRATIONS.md`): the four from 16 to 19 November.
+
+Decisions made without asking:
+
+- Only **A1** today, because it is marked large.
+- The organisation block shows "Property manager" for every organisation
+  until account types are stored in B2 (D-5). With several organisations
+  it opens a list, but the others cannot be picked until B5.
+- The person block shows the email address in place of a name until
+  profiles exist (B2).
+- No notifications bell yet: there is nothing for it to list until D5,
+  and the roadmap's A1 does not ask for it. It is added with D5.
+- **+ New** lists Property only. Tenant needs a home or room first, and
+  Payment, Owner, Repair and Contractor have no page yet.
+- The search placeholder says "Search homes and tenants…" rather than the
+  mockup's "…owners…", because owners are not searchable until D3.
+- Search does not write `audit_log`: it changes nothing, and search terms
+  are often names, which the audit log must never hold.
+- The phone bottom bar has Today, Properties, Rent and More; Repairs joins
+  when it exists. Settings and Sign out are under More.
+- The page title on `/dashboard` is still "Dashboard"; it becomes "Today"
+  in A3.
+- No new dependencies.
+
+Needs a human:
+
+- **Run `pnpm test:e2e` and `pnpm test:rls` locally** (new spec
+  `e2e/shell.spec.ts`), and look at the new shell at 375, 768 and 1440px:
+  sidebar, ⌘K search, + New, and More on a phone.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Sixth day. Without it the run cannot read the Next.js guides, take
+  screenshots or run the app.
+- **Apply the four pending migrations** (review them first). The photos
+  one is needed before deploying `main`.
+- From earlier days (unchanged): legal check on "remove personal details";
+  "Remove photo" hard-deletes instead of archiving; Resend and
+  `CRON_SECRET` settings for the late rent email; delete the merged
+  `auto/*` branches (now including `auto/2026-11-20`); Dependabot pull
+  requests #1, #2, #3, #5, #6 and #9 are open.

@@ -129,7 +129,7 @@ test.describe("rent", () => {
     // The dashboard adds it up: £550 in, £400 to the owner, £150 left.
     await page
       .getByRole("navigation", { name: "Main" })
-      .getByRole("link", { name: "Home", exact: true })
+      .getByRole("link", { name: "Today", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Dashboard" }),

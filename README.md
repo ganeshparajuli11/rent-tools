@@ -175,10 +175,19 @@ GitHub Actions.
 
 ## Screens and layout
 
-- Phones and tablets (under 1024px): a header, a bottom bar with labelled
-  icons, and lists shown as cards.
-- Laptops and desktops (1024px and wider): a sidebar that is always on show,
-  and lists shown as tables. Table headings are links that sort the list in
+- The look follows `docs/DESIGN_SYSTEM.md`: colours are the `--pd-*` tokens
+  in `globals.css` (as Tailwind colours such as `bg-canvas`, `text-ink-2`,
+  `text-bad`), never new hard-coded colours. The app shell lives in
+  `src/components/app/`; the menu is defined once in `src/lib/nav.ts`, where
+  pages that do not exist yet are marked `ready: false` and left out.
+- Every signed-in page has a top bar with search (⌘K or Ctrl K, homes and
+  tenants for now) and **+ New**. Dates in tables, forms and records use
+  `formatDateUK` (DD/MM/YYYY).
+- Phones and tablets (under 1024px): a top bar, a bottom bar with labelled
+  icons and **More** for the rest of the menu, and lists shown as cards.
+- Laptops and desktops (1024px and wider): a grouped sidebar that is always
+  on show (organisation at the top, you and Sign out at the bottom), and
+  lists shown as tables. Table headings are links that sort the list in
   the database (`?sort=` and `?dir=`), because lists are paginated.
 - Forms and detail pages keep a fixed, narrow width on every screen.
 - Every focusable element gets the same strong focus ring (`globals.css`), and

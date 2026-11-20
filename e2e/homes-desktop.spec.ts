@@ -55,10 +55,9 @@ test.describe("homes (desktop)", () => {
     // Sidebar with labelled links; the current page is marked.
     const menu = page.getByRole("navigation", { name: "Main" });
     await expect(menu).toHaveCount(1);
-    await expect(menu.getByRole("link", { name: "Homes" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await expect(
+      menu.getByRole("link", { name: /^Properties/ }),
+    ).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
     // A table, sorted by name A to Z to begin with.

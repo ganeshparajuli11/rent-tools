@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { createTestUser, hasAdminEnv } from "./helpers/auth";
+import { openFromMenu } from "./helpers/nav";
 
 /**
  * Settings, on a phone and on a desktop (both Playwright projects run this
@@ -32,10 +33,7 @@ test.describe("settings", () => {
   }) => {
     await user.signIn(page);
 
-    await page
-      .getByRole("navigation", { name: "Main" })
-      .getByRole("link", { name: "Settings" })
-      .click();
+    await openFromMenu(page, "Settings");
     await expect(
       page.getByRole("heading", { level: 1, name: "Settings" }),
     ).toBeVisible();

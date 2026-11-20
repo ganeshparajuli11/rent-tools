@@ -978,3 +978,62 @@ Needs a human:
   delete branches). None of them is a blocked build.
 - Dependabot pull requests are still open, including the grouped
   minor-and-patch one (#9), which passed CI.
+
+## 2026-11-20
+
+### Start of run
+
+- First run on the PropDesk task book (`docs/ROADMAP.md`, `PRODUCT_SPEC.md`,
+  `DESIGN_SYSTEM.md`, `DECISIONS.md`, all read).
+- Latest CI run on `main` (commit `e9e5568`, the task book): passed. Nothing
+  to fix.
+- No open "Daily build blocked" issue. The branches `auto/2026-11-15` to
+  `auto/2026-11-19` and `auto/2026-11-18-format-probe` still exist; earlier
+  logs say all are merged and none is a blocked build, so no task was spent
+  on them. No `next` branch yet, so nothing to rebase.
+- **Environment problem, sixth day:** `pnpm install --frozen-lockfile`
+  cannot run. `registry.npmjs.org` does not resolve directly and the egress
+  proxy answers 403 (a policy denial; not retried or worked around). No
+  `node_modules`, so the Next.js guides cannot be read and the checks cannot
+  run here. Same approach as before: work goes to `auto/2026-11-20`, the CI
+  workflow runs every Step 5 check there, and `main` only moves forward to
+  a commit that passed them all. New code uses only Next.js and Base UI APIs
+  the existing code already uses.
+
+### Plan
+
+Today: **A1 (L) only**, since it is marked large. No decision blocks it.
+
+**A1: Design tokens and app shell** → `main` (no migration).
+
+- Scope: `DESIGN_SYSTEM.md` §1 tokens in `globals.css` (as `--pd-*`
+  variables, mapped onto the shadcn variables and exposed as Tailwind
+  colours); Geist is already loaded with `next/font`. New shell in
+  `src/components/app/`: grouped sidebar (links to pages that do not exist
+  yet are left out, and a group with nothing in it is hidden), organisation
+  block (name and account type; a menu of the user's organisations only
+  when there is more than one, switching comes in B5), person block
+  (initials, email until profiles exist in B2, role) with Sign out; top bar
+  with a search box that opens a ⌘K / Ctrl K dialog searching homes and
+  tenants, and a **+ New** menu with only the items that work today
+  (Property); phone top bar (logo, search icon, + New) and a bottom bar with
+  Today, Properties, Rent and More (More opens the rest of the menu).
+  `formatDateUK` (DD/MM/YYYY) with tests, used where record and table dates
+  are shown.
+- Files: `src/app/globals.css`, `src/app/(app)/layout.tsx`,
+  `src/components/app/*` (new), `src/components/app-nav.tsx` (removed),
+  `src/lib/dates.ts`, `src/lib/nav.ts`, `src/lib/people.ts`,
+  `src/lib/validation/search.ts`, `src/server/shell.ts`,
+  `src/server/search.ts`, `src/app/(app)/search/actions.ts`,
+  `src/server/run-action.ts`, the guard test, e2e specs that click menu
+  links by their old names.
+- Migration: none. Account type is not stored until B2, so the
+  organisation block shows "Property manager" (D-5).
+- Tests: unit tests for `formatDateUK`, the menu groups, initials and role
+  names, and the search schema (it strips characters that could change a
+  query filter); guard test updated for the search action; a new Playwright
+  spec for the shell at phone and desktop widths (⌘K search, + New, More).
+- Risks: no local typecheck or build (CI only); Base UI dialog and menu
+  props must match the copies in `src/components/ui/`; the search action
+  is read-only, so it does not write `audit_log` (a search term can be a
+  person's name, which the audit log must never hold).

@@ -26,7 +26,7 @@ const TOO_MANY =
 
 export async function runAction<T>(
   /** Area of the app, used for the rate limit and the log line. */
-  scope: "homes" | "tenants" | "rent" | "settings",
+  scope: "homes" | "tenants" | "rent" | "settings" | "search",
   name: string,
   fn: (ctx: Ctx) => Promise<T>,
 ): Promise<ActionResult<T>> {
@@ -39,7 +39,11 @@ export async function runAction<T>(
   }
 
   try {
-    const limit = await rateLimit(`${scope}-write`, user.id, 60, "60 s");
+    // Search runs as people type, so it has its own, larger allowance.
+    const limit =
+      scope === "search"
+        ? await rateLimit("search-read", user.id, 120, "60 s")
+        : await rateLimit(`${scope}-write`, user.id, 60, "60 s");
     if (!limit.success) return { ok: false, error: TOO_MANY };
 
     const supabase = await createClient();

@@ -97,6 +97,9 @@ const NO_AUDIT_DATA_FUNCTIONS: Record<string, string> = {
   // Only works out a Storage path for the browser to upload to; the photo
   // row (and its audit_log entry) is written later by photos.addPhoto.
   "photos.preparePhotoUpload": "writes nothing",
+  // The ⌘K search only reads. A search term is often a person's name, which
+  // the audit log must never hold.
+  "search.searchRecords": "reads only",
 };
 
 const files = sourceFiles();
@@ -117,6 +120,7 @@ describe("server actions", () => {
         "app/(app)/homes/actions.ts",
         "app/(app)/homes/photo-actions.ts",
         "app/(app)/rent/actions.ts",
+        "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
         "app/(app)/tenants/actions.ts",
       ]),

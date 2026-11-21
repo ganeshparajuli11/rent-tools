@@ -107,7 +107,10 @@ export function RoomList({
 
   return (
     <section aria-labelledby="rooms-heading" className="flex flex-col gap-3">
-      <h2 id="rooms-heading" className="text-xl font-semibold">
+      <h2
+        id="rooms-heading"
+        className="text-xl font-semibold tracking-[-0.02em]"
+      >
         Rooms
       </h2>
 

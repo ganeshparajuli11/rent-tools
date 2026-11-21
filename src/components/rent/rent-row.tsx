@@ -14,6 +14,7 @@ import {
   removePaymentAction,
   restorePaymentAction,
 } from "@/app/(app)/rent/actions";
+import { Avatar } from "@/components/app/avatar";
 import { applyServerErrors, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { formatDateUK } from "@/lib/dates";
@@ -111,18 +112,21 @@ export function RentRowItem({
   const paid = row.status === "paid";
 
   return (
-    <li className="flex flex-col gap-4 p-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start lg:gap-x-6">
-      <div className="flex min-w-0 flex-col">
-        <Link
-          href={`/tenants/${row.tenantId}`}
-          className="inline-flex min-h-11 items-center self-start text-lg font-semibold break-words underline underline-offset-4"
-        >
-          {row.tenantName}
-        </Link>
-        <span className="text-base text-muted-foreground">
-          {place}
-          {row.movedOut ? " (moved out)" : ""}
-        </span>
+    <li className="flex flex-col gap-4 py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start lg:gap-x-6">
+      <div className="flex min-w-0 items-start gap-3">
+        <Avatar name={row.tenantName} size="sm" className="mt-1.5" />
+        <div className="flex min-w-0 flex-col">
+          <Link
+            href={`/tenants/${row.tenantId}`}
+            className="inline-flex min-h-11 items-center self-start text-base font-semibold break-words underline-offset-4 hover:underline"
+          >
+            {row.tenantName}
+          </Link>
+          <span className="text-sm text-muted-foreground">
+            {place}
+            {row.movedOut ? " (moved out)" : ""}
+          </span>
+        </div>
       </div>
 
       <div className="flex min-w-0 flex-col gap-1 text-base">
@@ -180,7 +184,7 @@ export function RentRowItem({
       ) : null}
 
       {row.payments.length > 0 ? (
-        <details className="rounded-lg border px-4 lg:col-span-3">
+        <details className="rounded-xl border border-border px-4 lg:col-span-3">
           <summary className="min-h-11 cursor-pointer content-center text-base">
             Payments ({row.payments.length})
           </summary>
@@ -251,7 +255,7 @@ function OtherAmountForm({
       noValidate
       onSubmit={onSubmit}
       aria-label={`Other amount for ${row.tenantName}`}
-      className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4 lg:col-span-3"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-canvas p-4 lg:col-span-3"
     >
       <TextField
         form={form}

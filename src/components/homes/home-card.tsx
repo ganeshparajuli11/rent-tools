@@ -1,7 +1,4 @@
-import { ChevronRightIcon, HouseIcon } from "lucide-react";
-import Link from "next/link";
-
-import { Badge } from "@/components/ui/badge";
+import { PhotoCard } from "@/components/app/photo-card";
 import type { HomeListItem } from "@/server/homes";
 
 export function roomsLabel(home: HomeListItem) {
@@ -10,39 +7,15 @@ export function roomsLabel(home: HomeListItem) {
   return home.roomCount === 1 ? "1 room" : `${home.roomCount} rooms`;
 }
 
-/** One home in the list. The whole card is the link (big touch target). */
+/** One home in the list on phones and tablets: its photo, name and rooms. */
 export function HomeCard({ home }: { home: HomeListItem }) {
   return (
-    <Link
+    <PhotoCard
       href={`/homes/${home.id}`}
-      className="flex min-h-24 items-center gap-3 rounded-xl border p-4 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
-    >
-      <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted text-muted-foreground">
-        {home.coverUrl ? (
-          // Signed links change on every load, so next/image is not used.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={home.coverUrl}
-            alt=""
-            loading="lazy"
-            className="size-full object-cover"
-          />
-        ) : (
-          <HouseIcon aria-hidden="true" className="size-8" />
-        )}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-lg font-semibold">{home.name}</span>
-          {home.archived ? <Badge variant="secondary">Archived</Badge> : null}
-        </span>
-        <span className="text-base text-muted-foreground">{home.address}</span>
-        <span className="text-base">{roomsLabel(home)}</span>
-      </div>
-      <ChevronRightIcon
-        aria-hidden="true"
-        className="size-5 shrink-0 text-muted-foreground"
-      />
-    </Link>
+      photoUrl={home.coverUrl}
+      title={home.name}
+      meta={`${roomsLabel(home)} · ${home.address}`}
+      chip={home.archived ? { label: "Archived", tone: "outline" } : undefined}
+    />
   );
 }

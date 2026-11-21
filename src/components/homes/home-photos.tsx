@@ -223,7 +223,10 @@ export function HomePhotos({
   return (
     <section aria-labelledby="photos-heading" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="photos-heading" className="text-xl font-semibold">
+        <h2
+          id="photos-heading"
+          className="text-xl font-semibold tracking-[-0.02em]"
+        >
           Photos
           {photos.length > 0 ? (
             <span className="ml-2 text-base font-normal text-muted-foreground">

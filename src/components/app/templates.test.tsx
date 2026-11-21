@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import Link from "next/link";
 import { describe, expect, it } from "vitest";
 
 import { RentStatusBadge } from "@/components/rent/rent-status-badge";
@@ -68,7 +69,7 @@ describe("PageHeader", () => {
         count={4}
         countLabel="homes"
         description="Every home you let."
-        actions={<a href="/homes/new">Add a home</a>}
+        actions={<Link href="/homes/new">Add a home</Link>}
       />,
     );
     expect(
@@ -117,7 +118,11 @@ describe("StatCard", () => {
 describe("SectionCard", () => {
   it("is a section named by its heading", () => {
     render(
-      <SectionCard id="owner" title="Owner" action={<a href="/x">View</a>}>
+      <SectionCard
+        id="owner"
+        title="Owner"
+        action={<Link href="/x">View</Link>}
+      >
         <p>Demo Owner</p>
       </SectionCard>,
     );
@@ -239,7 +244,7 @@ describe("RecordHeader", () => {
         avatarName="Sample House 01"
         chips={<FactChip>Let by the room · 4 rooms</FactChip>}
         subtitle="1 Example Street, LS6 1AA"
-        actions={<a href="/homes/1/edit">Edit home</a>}
+        actions={<Link href="/homes/1/edit">Edit home</Link>}
       />,
     );
     expect(screen.getByRole("link", { name: "All homes" })).toHaveAttribute(
@@ -291,7 +296,7 @@ describe("EmptyState", () => {
         icon={<svg />}
         title="Add your first home"
         description="Start with one home you let."
-        action={<a href="/homes/new">Add a home</a>}
+        action={<Link href="/homes/new">Add a home</Link>}
       />,
     );
     expect(

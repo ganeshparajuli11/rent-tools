@@ -13,7 +13,7 @@ import { notFound } from "next/navigation";
 import {
   primaryActionClass,
   secondaryActionClass,
-} from "@/components/app/actions";
+} from "@/components/app/action-classes";
 import { Avatar } from "@/components/app/avatar";
 import { FactChip, RecordHeader } from "@/components/app/record-header";
 import { RecordTabs } from "@/components/app/record-tabs";

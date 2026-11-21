@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { secondaryActionClass } from "@/components/app/actions";
+import { secondaryActionClass } from "@/components/app/action-classes";
 import { FactChip, RecordHeader } from "@/components/app/record-header";
 import { SectionCard } from "@/components/app/section-card";
 import { StatusPill } from "@/components/app/status-pill";

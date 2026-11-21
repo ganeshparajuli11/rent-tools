@@ -9,7 +9,7 @@ import Link from "next/link";
 import {
   primaryActionClass,
   secondaryActionClass,
-} from "@/components/app/actions";
+} from "@/components/app/action-classes";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { Pagination } from "@/components/app/pagination";

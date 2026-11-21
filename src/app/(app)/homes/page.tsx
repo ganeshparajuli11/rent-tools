@@ -2,7 +2,7 @@ import { HousePlusIcon, PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { primaryActionClass } from "@/components/app/actions";
+import { primaryActionClass } from "@/components/app/action-classes";
 import { EmptyState } from "@/components/app/empty-state";
 import { FilterTabs } from "@/components/app/filter-tabs";
 import { PageHeader } from "@/components/app/page-header";

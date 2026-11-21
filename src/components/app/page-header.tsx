@@ -36,7 +36,10 @@ export function PageHeader({
             <span className="text-xl font-medium tracking-normal text-muted-foreground tabular-nums">
               {count}
               {countLabel ? (
-                <span className="sr-only"> {countLabel}</span>
+                <>
+                  {" "}
+                  <span className="sr-only">{countLabel}</span>
+                </>
               ) : null}
             </span>
           ) : null}

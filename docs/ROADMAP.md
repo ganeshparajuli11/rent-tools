@@ -41,7 +41,7 @@ migration is applied.
       tenants for now) and the **+ New** menu (only items that work), phone
       bottom bar with More, organisation and person blocks. Add a shared
       `formatDateUK` (DD/MM/YYYY) helper with tests and use it in tables.
-- [ ] **A2 (L): Page templates.** Build `src/components/app/` templates from
+- [x] **A2 (L): Page templates.** Build `src/components/app/` templates from
       §3 and the components in §4 (stat card, section card, status pill, filter
       tabs, data table, record header, tabs, activity timeline, empty state,
       photo card, side sheet). Move the Homes list and home page, Tenants and

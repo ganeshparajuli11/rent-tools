@@ -1148,3 +1148,170 @@ Needs a human:
   `CRON_SECRET` settings for the late rent email; delete the merged
   `auto/*` branches (now including `auto/2026-11-20`); Dependabot pull
   requests #1, #2, #3, #5, #6 and #9 are open.
+
+## 2026-11-21
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md`, `DESIGN_SYSTEM.md` (and the
+  Today mockup), `DECISIONS.md`, `PENDING_MIGRATIONS.md`, README, AGENTS.md
+  and the last days of this log.
+- Latest CI run on `main` (run 46, commit `135d78c`, yesterday's log):
+  passed. Nothing to fix.
+- No open "Daily build blocked" issue. `auto/2026-11-16`, `-17`, `-19` and
+  `-20` are merged into `main`. `auto/2026-11-15`, `auto/2026-11-18` and
+  `auto/2026-11-18-format-probe` are not ancestors of `main`; earlier logs
+  say their work reached `main` by other commits (and no blocked-build issue
+  is open for them), so no task was spent on them. No `next` branch yet.
+- **Environment problem, seventh day:** `pnpm install --frozen-lockfile`
+  fails. `registry.npmjs.org` does not resolve directly and the egress proxy
+  answers 403 (a policy denial; not retried or worked around). No
+  `node_modules`, so the Next.js guides cannot be read and typecheck, lint,
+  tests and build cannot run here. Same approach as before: the work goes to
+  `auto/2026-11-21`, the CI workflow runs every Step 5 check there, and
+  `main` only moves forward to a commit that passed them all. New code uses
+  only Next.js, React and Base UI APIs the existing code already uses.
+
+### Plan
+
+Today: **A2 (L) only**, since it is marked large. No decision blocks it.
+
+**A2: Page templates** → `main` (no migration).
+
+- Scope: shared components in `src/components/app/` from
+  `DESIGN_SYSTEM.md` §3 and §4: page header, stat card (and grid), section
+  card, status pill, count pill, priority badge, filter tabs, data table
+  (sticky header, row hover, sortable headings as links), pagination,
+  record header (back link, photo or initials avatar, chips, actions),
+  record tabs (links, so they work without JavaScript), activity timeline,
+  empty state, photo card, avatar and side sheet. Then move the Properties
+  list, the home page, the tenant page and the Rent page onto them without
+  changing what they do. A small `homeStatus` helper gives the home status
+  words (Fully let, 1 room empty, Empty, Archived).
+- Files: `src/components/app/*` (new), `src/lib/home-status.ts` (new),
+  `src/app/(app)/homes/page.tsx`, `src/app/(app)/homes/[id]/page.tsx`,
+  `src/app/(app)/tenants/[id]/page.tsx`, `src/app/(app)/rent/page.tsx`,
+  `src/components/homes/homes-table.tsx`, `home-card.tsx`,
+  `src/components/rent/rent-status-badge.tsx`, loading skeletons, e2e specs
+  only where a visible word changes.
+- Migration: none.
+- Tests: unit tests (Testing Library) for every new component and the home
+  status helper; a Playwright spec that opens the Properties list, a home
+  and the Rent page at 375, 768 and 1440px and saves screenshots.
+- Risks: no local typecheck, lint or build (CI only); e2e specs find things
+  by their accessible names, so every heading, link and button keeps its
+  name; screenshots cannot be taken here (the app cannot run).
+
+### Results
+
+| Task                   | Status                    | Branch                         |
+| ---------------------- | ------------------------- | ------------------------------ |
+| A2 (L): Page templates | Done                      | `main` (via `auto/2026-11-21`) |
+| A3 onwards             | Not started (A2 is large) |                                |
+
+What A2 added (`src/components/app/`):
+
+- Page header (title, count read out as "Properties 4 homes", one line,
+  main action), stat card and grid with a progress bar, section card,
+  status pill (good, bad, warn, info, orange, neutral, outline), count
+  pill, priority badge (Urgent, High, Normal, Low), filter tabs and record
+  tabs (both links, so they work without JavaScript and keep the address),
+  data table (sticky header, row hover, its own sideways scroll, sortable
+  headings as links), pagination, record header (back link, photo or
+  initials, fact chips, actions), activity timeline, empty state, photo
+  card, initials avatar, side sheet (full screen on phones, 560px
+  elsewhere), and `action-classes.ts` for links that look like buttons.
+- `homeStatus()` in `src/lib/home-status.ts`: Fully let, 1 room empty /
+  N rooms empty, Empty, Archived.
+- Rent statuses now use the fixed colours: Paid green, Part paid blue,
+  Due amber, Late red (always with the word).
+- Pages moved onto them, same behaviour, same link and button names:
+  **Properties** (title is now "Properties", matching the menu; Current /
+  Including archived filter tabs replace the "Show archived homes" link;
+  photo cards on phones and tablets, the shared table on desktop),
+  **a home** (record header with cover photo, let type chip and status;
+  Overview and Photos tabs, `?tab=photos`; stat and section cards),
+  **a tenant** (record header with initials, Current / Moved out; Rent
+  card, Contact card on the right) and **Rent** (page header, three stat
+  cards with a progress bar, rows in a section card with initials).
+
+Checks (`pnpm install` cannot run here, so every check ran in GitHub
+Actions on `auto/2026-11-21`; run 52 passed):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Runs 47, 48, 51 failed on the way and were fixed: plain `<a>` page links
+in the new unit test (lint), a union type that Prettier 3.10 prints
+differently from the 3.8 copy here (found with a short-lived probe branch,
+`auto/2026-11-21-format-probe`; the type is now derived from its colour
+map), a file named `actions.ts` that the server-action guard test
+reserves (renamed `action-classes.ts`), and the spoken page count.
+Local stand-ins: every new component rendered with React's server
+renderer through esbuild; Tailwind 4.3.3's own class order checked on
+every changed file.
+
+**Screenshots at 375, 768 and 1440px: not taken.** The app cannot run
+here (no `node_modules`, no Supabase). The new `e2e/templates-desktop.spec.ts`
+opens Properties, a home and Rent at all three widths, checks nothing
+scrolls sideways and saves `test-results/screens/*.png` when it is run
+locally.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; the only
+  hit is the e2e skip message naming `SUPABASE_SERVICE_ROLE_KEY`). No new
+  `NEXT_PUBLIC_` variable; no service-role client near the new code.
+- No new server action or route handler. Pages still call
+  `requireUser()` and read with the user's own client, so RLS applies.
+  The home page's `?tab=` value is checked against a fixed list.
+- No raw SQL, no `dangerouslySetInnerHTML`, no new error text.
+- No migration, so no new table or policy. Nothing weakened.
+
+Pending migrations: none new today. Still waiting: the four from 16 to
+19 November (`docs/PENDING_MIGRATIONS.md`).
+
+Decisions made without asking:
+
+- Only **A2** today, because it is marked large.
+- The Properties page title is "Properties" (the menu name); sentences
+  and links still say "home" ("All homes", "Add a home").
+- Archived homes are a filter tab ("Including archived") instead of a
+  link under the list. Same address (`?archived=1`).
+- A home's photos moved to a **Photos** tab; the cover photo shows in the
+  header. Past tenants stay on Overview (a History tab comes with the
+  activity log). The tenant page has no tabs yet: it has only two cards.
+- The Rent page has no status filter tabs yet; filtering rent by status
+  is part of A3's "Rent this month" table.
+- Tables keep their own sideways scroll and a 640px minimum width on
+  wide screens; phones and tablets get cards instead.
+- The side sheet is built but not used yet; quick edits move into it as
+  later items touch those forms.
+- No new dependencies.
+
+Needs a human:
+
+- **Run `pnpm test:e2e` and `pnpm test:rls` locally.** New spec
+  `e2e/templates-desktop.spec.ts`; look at its screenshots in
+  `test-results/screens/` (Properties, a home, Rent at 375, 768 and
+  1440px).
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`.**
+  Seventh day. Without it the run cannot read the Next.js guides, take
+  screenshots or run checks before pushing.
+- **Delete the branch `auto/2026-11-21-format-probe`** (the run could not
+  delete it: the push was refused) and the merged `auto/*` branches.
+- **Apply the four pending migrations** (review them first).
+- From earlier days (unchanged): legal check on "remove personal details";
+  "Remove photo" hard-deletes instead of archiving; Resend and
+  `CRON_SECRET` settings for the late rent email; Dependabot pull
+  requests are open.

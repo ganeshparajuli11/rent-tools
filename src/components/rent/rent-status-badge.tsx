@@ -1,13 +1,13 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusPill, type StatusTone } from "@/components/app/status-pill";
 import { RENT_STATUS_LABELS, type RentStatus } from "@/lib/rent";
-import { cn } from "@/lib/utils";
 
-const VARIANTS = {
-  late: "destructive",
-  due: "outline",
-  part_paid: "secondary",
-  paid: "default",
-} as const satisfies Record<RentStatus, string>;
+/** The fixed colour for each rent status (docs/DESIGN_SYSTEM.md §4). */
+export const RENT_STATUS_TONES = {
+  late: "bad",
+  due: "warn",
+  part_paid: "info",
+  paid: "good",
+} as const satisfies Record<RentStatus, StatusTone>;
 
 /**
  * The status of a month's rent, always as a word (never colour alone):
@@ -21,11 +21,8 @@ export function RentStatusBadge({
   className?: string;
 }) {
   return (
-    <Badge
-      variant={VARIANTS[status]}
-      className={cn("h-7 px-3 text-sm font-semibold", className)}
-    >
+    <StatusPill tone={RENT_STATUS_TONES[status]} className={className}>
       {RENT_STATUS_LABELS[status]}
-    </Badge>
+    </StatusPill>
   );
 }

@@ -47,7 +47,7 @@ migration is applied.
       photo card, side sheet). Move the Homes list and home page, Tenants and
       Rent pages onto them without changing behaviour. Playwright screenshots
       at 375, 768 and 1440px in the log.
-- [ ] **A3: Today page.** Rebuild `/dashboard` as **Today** to match
+- [x] **A3: Today page.** Rebuild `/dashboard` as **Today** to match
       `docs/design/today-dashboard.dc.html` with the data that exists now
       (rent, late rent, owners' rent, rooms let, homes with photos, activity).
       Repairs and tenancy-ending cards appear once those features exist. First-run
@@ -55,7 +55,7 @@ migration is applied.
 
 ## Phase B: accounts and multiple users
 
-- [ ] **B1: Email and password.** Sign up, sign in and password reset with
+- [x] **B1: Email and password.** Sign up, sign in and password reset with
       Supabase Auth (D-12), keeping "Email me a sign-in code" as a second
       option. Rate limits, plain errors, e2e tests. Then remove the test-only
       password box (`src/server/test-login.ts`, `ENABLE_TEST_LOGIN`) and update

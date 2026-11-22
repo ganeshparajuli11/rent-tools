@@ -1380,3 +1380,161 @@ Today: **A3** and **B1** (neither is large). No decision blocks them.
 - Tests: Zod schema tests, the server-action guard test, e2e for the forms.
 - Risks: sign-in is the front door of the live test site; anything not
   verified by CI stays off `main`.
+
+### Results
+
+| Task                   | Status                        | Branch                         |
+| ---------------------- | ----------------------------- | ------------------------------ |
+| A3: Today page         | Done                          | `main` (via `auto/2026-11-22`) |
+| B1: Email and password | Done                          | `main` (via `auto/2026-11-22`) |
+| B2 onwards             | Not started (two items a day) |                                |
+
+What A3 added:
+
+- `/dashboard` is now **Today**, laid out like the approved mockup: date
+  line, "Good morning." (by the hour in London; no first name until
+  profiles arrive in B2), and one sentence on how many things need the
+  user. Four figures: **Rent received, November** (£ of £, bar, "75% in ·
+  £1,285 still to come"), **Late rent** (red when above zero, "1 tenant ·
+  14 days overdue"), **Left after owners** (green, red below zero, "£400
+  owed to owners for 1 home"), **Rooms let** (one dash per room or whole
+  home, a bar above 24). **Needs you**: late rent (longest late first,
+  "Record payment" opens that month's rent) and rooms or whole homes empty
+  for 2+ weeks ("Add tenant" opens the add-tenant step for that room), up
+  to 5 with "and N more". **Your homes**: 4 photo cards with the status
+  chip. **Rent this month**: All / Late / Still due / Paid tabs as links
+  (`?rent=late`, opening at the table), a table on desktop and cards on
+  phones and tablets, 10 rows then "See all rent", and **Mark as paid**
+  (the existing server action) with an Undo toast. **Recent activity**:
+  the last 6 `audit_log` rows in plain words with amounts and home names
+  only, never people ("Payment of £580 recorded at Sample House 01",
+  "Today, 09:12", "3 days ago"). A new account sees **Add your first
+  property** with three steps instead of empty figures.
+- Pure helpers in `src/lib/today.ts` (21 unit tests); the money sums stay
+  in `buildDashboard`, so Today, the rent page and the late rent email
+  agree. Queries: membership, then homes, charges and activity together,
+  then one photos query and one signing call. A constant six, never per
+  home (was three).
+
+What B1 added:
+
+- `/sign-in` is email and password, with **Forgot your password?** and
+  **Email me a sign-in code instead** (`/sign-in/code`, the old flow,
+  unchanged). `/sign-up` creates an account (at least 8 characters, at most
+  72; no symbol rules) and goes to Today, or to "Confirm your email" when
+  the project asks for confirmation. `/reset-password` emails a link and
+  always shows the same "Check your email" page; the link signs the person
+  in for `/reset-password/new` (two boxes, must match).
+- Four new server actions (`signInWithPassword`, `signUpWithPassword`,
+  `requestPasswordReset`, `setNewPassword`), each validated with a shared
+  Zod schema and rate limited by IP and by account; errors are plain and
+  appear under the box they are about. The guard test lists them.
+- `/auth/confirm` now also takes `type=signup|recovery` token links and
+  PKCE `code` links (Supabase's default templates), and still redirects
+  only to fixed pages. The proxy lets signed-out people open `/sign-up` and
+  `/reset-password`, and sends signed-in people from sign-in or sign-up to
+  Today.
+- Removed `src/server/test-login.ts`, the test password form and
+  `ENABLE_TEST_LOGIN`. The demo account signs in on the normal page; the
+  seed script reads `DEMO_EMAIL` / `DEMO_PASSWORD` (old names still work).
+  New `supabase/templates/reset-password.html`; `config.toml` sets the
+  minimum password length to 8 and the reset template. README and
+  `.env.example` updated.
+
+Checks (`pnpm install` cannot run here; every check ran in GitHub Actions
+on `auto/2026-11-22`: run 55 after A3, run 56 after B1, both passed the
+first time):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Local stand-ins before pushing: `today.test.ts`, `dashboard.test.ts`,
+`rent.test.ts`, `validation/auth.test.ts` and the server-action guard test
+ran under Node's type stripping with a small Vitest shim (all passed);
+TypeScript 7 on the pure modules; Prettier 3.8 and Tailwind 4.3.3's class
+order on every changed file; every new page rendered with React's server
+renderer through esbuild.
+
+**Screenshots:** the Today page was rendered with fixture data, styled with
+the real `globals.css` compiled by Tailwind 4.3.3, and photographed in
+Chromium at 375, 768 and 1440px: no sideways scroll at any width, layout
+matches the mockup (stat cards one per row on phones, two-up from 420px,
+four-up on desktop; Needs you and Your homes side by side from 1280px).
+Icons and the Geist font were stand-ins, so those images are not kept.
+The real screenshots come from `e2e/today.spec.ts` (saved to
+`test-results/screens/today-*.png`) when it runs locally.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; hits are
+  only the README variable table and e2e skip messages). No new
+  `NEXT_PUBLIC_` variable; `NEXT_PUBLIC_APP_URL` (already public) builds the
+  email link address. No service-role client near the new code.
+- Today adds no server action: "Mark as paid" and Undo call the existing
+  rent actions (session, organisation from memberships, Zod, rate limit,
+  audit). Reads use the user's own client (RLS) and filter by the
+  organisation from memberships. The rent filter is checked against a
+  fixed list. Activity text never includes names or contact details.
+- The four new auth actions run before a session exists (like the code
+  actions): Zod plus rate limits by IP and account; `setNewPassword` needs
+  the session from the reset link. Sign-up and reset never reveal whether
+  an email has an account. `/auth/confirm` stays rate limited and only
+  redirects to fixed paths (no `next` URL is followed, only `next=reset`).
+  Auth errors are logged as codes only, never the email.
+- No raw SQL, no `dangerouslySetInnerHTML`, no internals in error text. No
+  migration, so no new table or policy. Nothing weakened; a test-only
+  password path was removed.
+
+Pending migrations: none new today. Still waiting: the four from 16 to 19
+November (`docs/PENDING_MIGRATIONS.md`).
+
+Decisions made without asking:
+
+- **Needs you** includes rooms and whole homes empty for 2+ weeks now (the
+  data exists: the last move-out date, or the date the room or home was
+  added). D5 adds tenancies ending soon and urgent repairs.
+- No first name in the greeting until profiles exist (B2): "Good morning."
+- No "Demo data" pill: nothing marks an organisation as demo yet.
+- "Rooms let" counts each room once and each home let as a whole once.
+- "Left after owners" shows the number of homes with owner rent, not
+  owners (owner records arrive in C1).
+- Passwords: at least 8 characters, at most 72, no symbol or capital
+  rules (NCSC-style advice); the Supabase minimum should match.
+- After sign-up without email confirmation the person goes straight to
+  Today; with confirmation on, to "Confirm your email".
+- No new dependencies.
+
+Needs a human:
+
+- **Supabase (hosted project) for B1:** paste
+  `supabase/templates/reset-password.html` into **Reset Password**; add
+  `<app URL>/auth/confirm` to **Redirect URLs**; set the minimum password
+  length to 8. Until the template is pasted, reset links still work but
+  only in the same browser (Supabase's default PKCE link).
+- **Remove `ENABLE_TEST_LOGIN` (and `TEST_LOGIN_*`) from Vercel**; the
+  variable does nothing now. The demo account signs in on the normal page
+  with its password.
+- **Run `pnpm test:e2e` and `pnpm test:rls` locally.** New specs
+  `e2e/today.spec.ts` and `e2e/auth.spec.ts`; `e2e/rent.spec.ts` now
+  checks the Today figures. Look at `test-results/screens/today-*.png`.
+- **Try by hand:** sign up with a new email, sign out, reset the password
+  from a real email, and sign in with the code.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (eighth day).
+- **Apply the four pending migrations** (review them first).
+- **Delete** the probe branches `auto/2026-11-18-format-probe` and
+  `auto/2026-11-21-format-probe` and the merged `auto/*` branches.
+- From earlier days (unchanged): legal check on "remove personal details";
+  "Remove photo" hard-deletes instead of archiving; Resend and
+  `CRON_SECRET` settings for the late rent email; Dependabot pull
+  requests are open.

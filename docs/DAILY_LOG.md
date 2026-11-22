@@ -1315,3 +1315,68 @@ Needs a human:
   "Remove photo" hard-deletes instead of archiving; Resend and
   `CRON_SECRET` settings for the late rent email; Dependabot pull
   requests are open.
+
+## 2026-11-22
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md`, `DESIGN_SYSTEM.md` (and the
+  Today mockup), `DECISIONS.md`, `PENDING_MIGRATIONS.md`, README, AGENTS.md
+  and the last days of this log.
+- Latest CI run on `main` (run 54, commit `ba96128`, yesterday's log):
+  passed. Nothing to fix. No open "Daily build blocked" issue; every
+  `auto/*` branch is merged or was resolved on earlier days. No `next`
+  branch yet.
+- The run has no `add_repo` tool; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, eighth day:** `pnpm install --frozen-lockfile`
+  fails (`registry.npmjs.org` does not resolve; the egress proxy answers
+  403, a policy denial, not retried). So, as before, every Step 5 check runs
+  in GitHub Actions on `auto/2026-11-22` and `main` only moves to a commit
+  that passed. New today: local stand-ins found in the image (Node 22 type
+  stripping for the pure unit tests, global TypeScript 7 for the pure
+  modules, esbuild + React 19 server rendering, Tailwind 4.3.3 to compile
+  the CSS and sort classes, and Playwright's Chromium for screenshots).
+
+### Plan
+
+Today: **A3** and **B1** (neither is large). No decision blocks them.
+
+**A3: Today page** → `main` (no migration).
+
+- Scope: rebuild `/dashboard` as Today to match the mockup with the data
+  that exists: date line, greeting, one sentence on what needs the user;
+  four stat cards (rent received this month with a bar, late rent, left
+  after owners, rooms let with one dash per place); **Needs you** (late
+  rent, and rooms or whole homes empty for 2+ weeks, each with one action);
+  **Your homes** (4 photo cards with the status chip); **Rent this month**
+  (All / Late / Still due / Paid as links, table on desktop, cards on
+  phones, "Mark as paid" with Undo); **Recent activity** from `audit_log`
+  with home names and amounts only. First-run card when there are no homes.
+  Repairs and tenancies ending stay out until D2 and D5.
+- Files: `src/lib/today.ts` (new, pure), `src/lib/dashboard.ts` (optional
+  `createdOn` and charge `id`), `src/server/dashboard.ts`,
+  `src/server/rent.ts` (charge ids, "can remove payments"),
+  `src/app/(app)/dashboard/*`, `src/components/rent/mark-paid-button.tsx`
+  (new), `e2e/rent.spec.ts`, `e2e/today.spec.ts` (new).
+- Migration: none (reads existing columns; photos are read in their own
+  query and simply hidden if that fails).
+- Tests: unit tests for every helper in `today.ts`; existing dashboard sums
+  unchanged; Playwright at 375, 768 and 1440px.
+- Risks: query count grows from three to five plus one Storage signing
+  call (still constant, never per home); "Mark as paid" reuses the existing
+  server action, so no new write path.
+
+**B1: Email and password** → `main` (no migration).
+
+- Scope: sign up, sign in and password reset with Supabase Auth, "Email me
+  a sign-in code" kept as a second option; rate limits and plain errors;
+  remove the test-only password box and `ENABLE_TEST_LOGIN`; update the seed
+  script and README.
+- Files: `src/app/(auth)/*`, `src/app/auth/confirm/route.ts`,
+  `src/lib/validation/auth.ts`, `src/server/test-login.ts` (removed),
+  `scripts/seed-demo.mjs`, README, e2e specs.
+- Migration: none.
+- Tests: Zod schema tests, the server-action guard test, e2e for the forms.
+- Risks: sign-in is the front door of the live test site; anything not
+  verified by CI stays off `main`.

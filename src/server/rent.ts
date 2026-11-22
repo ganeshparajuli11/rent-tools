@@ -280,6 +280,7 @@ const DASHBOARD_PAGE_SIZE = 1000;
 const DASHBOARD_MAX_PAGES = 5;
 
 type DashboardChargeRow = {
+  id: string;
   tenancy_id: string;
   period_start: string;
   due_date: string;
@@ -298,6 +299,20 @@ export async function getDashboardCharges(
   organisationId: string,
   today: string,
 ): Promise<DashboardCharge[]> {
+  const { charges } = await loadDashboardCharges(ctx, organisationId, today);
+  return charges;
+}
+
+/**
+ * The same charges, and whether payments can be removed yet (false until
+ * the `payments.removed_at` migration is applied), for "Mark as paid" with
+ * Undo on the Today page.
+ */
+export async function loadDashboardCharges(
+  ctx: Pick<Ctx, "supabase">,
+  organisationId: string,
+  today: string,
+): Promise<{ charges: DashboardCharge[]; canRemovePayments: boolean }> {
   const thisPeriod = monthStart(monthOf(today));
   // Both values are dates made on the server, never text from the browser.
   const wanted = `period_start.eq.${thisPeriod},due_date.lt.${today}`;
@@ -313,7 +328,7 @@ export async function getDashboardCharges(
       const full = await ctx.supabase
         .from("rent_charges")
         .select(
-          "tenancy_id, period_start, due_date, amount_pence, payments(amount_pence, removed_at)",
+          "id, tenancy_id, period_start, due_date, amount_pence, payments(amount_pence, removed_at)",
         )
         .eq("organisation_id", organisationId)
         .or(wanted)
@@ -327,7 +342,7 @@ export async function getDashboardCharges(
     const basic = await ctx.supabase
       .from("rent_charges")
       .select(
-        "tenancy_id, period_start, due_date, amount_pence, payments(amount_pence)",
+        "id, tenancy_id, period_start, due_date, amount_pence, payments(amount_pence)",
       )
       .eq("organisation_id", organisationId)
       .or(wanted)
@@ -350,7 +365,8 @@ export async function getDashboardCharges(
     }
   }
 
-  return rows.map((row) => ({
+  const charges = rows.map((row) => ({
+    id: row.id,
     tenancyId: row.tenancy_id,
     periodStart: row.period_start,
     dueDate: row.due_date,
@@ -359,6 +375,7 @@ export async function getDashboardCharges(
       row.payments.filter((p) => !p.removed_at).map((p) => p.amount_pence),
     ),
   }));
+  return { charges, canRemovePayments: withRemovedAt };
 }
 
 /** One charge with what has been paid towards it. Null if it is not ours. */

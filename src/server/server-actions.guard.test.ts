@@ -84,7 +84,10 @@ const SIGN_IN_ACTIONS: Record<string, "input" | "no-input"> = {
   requestSignInCode: "input",
   verifySignInCode: "input",
   resendSignInCode: "no-input",
-  signInWithTestPassword: "input",
+  signInWithPassword: "input",
+  signUpWithPassword: "input",
+  requestPasswordReset: "input",
+  setNewPassword: "input",
   signOut: "no-input",
 };
 

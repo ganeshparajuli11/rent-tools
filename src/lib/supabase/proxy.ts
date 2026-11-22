@@ -9,7 +9,17 @@ import { getPublicEnv, hasSupabaseEnv } from "@/lib/env";
  * "/api/cron" has no session by design: each cron route checks a secret
  * header itself (see src/lib/cron-secret.ts) and refuses everything else.
  */
-const PUBLIC_PATHS = ["/", "/sign-in", "/auth", "/api/cron"];
+const PUBLIC_PATHS = [
+  "/",
+  "/sign-in",
+  "/sign-up",
+  "/reset-password",
+  "/auth",
+  "/api/cron",
+];
+
+/** Screens for signed-out people only. Signed in, they go to Today. */
+const SIGNED_OUT_ONLY = ["/sign-in", "/sign-up"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(
@@ -93,8 +103,14 @@ export async function updateSession(request: NextRequest) {
     return redirectKeepingCookies(request, supabaseResponse, "/sign-in");
   }
 
-  // Already signed in but on the sign-in screens: go to the dashboard.
-  if (user && (pathname === "/sign-in" || pathname.startsWith("/sign-in/"))) {
+  // Already signed in but on the sign-in or sign-up screens: go to Today.
+  // (The reset-password pages stay open: the reset link signs people in.)
+  if (
+    user &&
+    SIGNED_OUT_ONLY.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
+  ) {
     return redirectKeepingCookies(request, supabaseResponse, "/dashboard");
   }
 

@@ -33,7 +33,7 @@ export default async function CheckEmailPage() {
         </p>
         <ResendCodeForm />
         <Link
-          href="/sign-in"
+          href="/sign-in/code"
           className="py-2 text-center text-base underline underline-offset-4"
         >
           Use a different email

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { signInSchema, verifyCodeSchema } from "./auth";
+import {
+  newPasswordSchema,
+  passwordResetRequestSchema,
+  passwordSignInSchema,
+  signInSchema,
+  signUpSchema,
+  verifyCodeSchema,
+} from "./auth";
 import { emailSchema } from "./common";
 
 const firstError = (result: {
@@ -91,4 +98,101 @@ describe("verifyCodeSchema", () => {
       );
     },
   );
+});
+
+describe("passwordSignInSchema", () => {
+  it("tidies the email and keeps the password as typed", () => {
+    expect(
+      passwordSignInSchema.parse({
+        email: " Taylor@Example.com ",
+        password: " pass word ",
+      }),
+    ).toEqual({ email: "taylor@example.com", password: " pass word " });
+  });
+
+  it("asks for the password when it is empty", () => {
+    const result = passwordSignInSchema.safeParse({
+      email: "taylor@example.com",
+      password: "",
+    });
+    expect(firstError(result)).toBe("Enter your password");
+  });
+});
+
+describe("signUpSchema", () => {
+  it("accepts an email and a long enough password", () => {
+    expect(
+      signUpSchema.parse({
+        email: "taylor@example.com",
+        password: "correct horse",
+      }),
+    ).toEqual({ email: "taylor@example.com", password: "correct horse" });
+  });
+
+  it("asks for a password when it is empty", () => {
+    const result = signUpSchema.safeParse({
+      email: "taylor@example.com",
+      password: "",
+    });
+    expect(firstError(result)).toBe("Choose a password");
+  });
+
+  it("needs at least 8 characters and at most 72", () => {
+    expect(
+      firstError(
+        signUpSchema.safeParse({
+          email: "taylor@example.com",
+          password: "short",
+        }),
+      ),
+    ).toBe("Use at least 8 characters");
+    expect(
+      firstError(
+        signUpSchema.safeParse({
+          email: "taylor@example.com",
+          password: "a".repeat(73),
+        }),
+      ),
+    ).toBe("Use 72 characters or fewer");
+  });
+});
+
+describe("passwordResetRequestSchema", () => {
+  it("needs a valid email", () => {
+    expect(passwordResetRequestSchema.safeParse({ email: "x" }).success).toBe(
+      false,
+    );
+    expect(
+      passwordResetRequestSchema.parse({ email: "Taylor@Example.com" }),
+    ).toEqual({ email: "taylor@example.com" });
+  });
+});
+
+describe("newPasswordSchema", () => {
+  it("accepts two matching passwords", () => {
+    expect(
+      newPasswordSchema.parse({
+        password: "a new passphrase",
+        confirm: "a new passphrase",
+      }),
+    ).toEqual({ password: "a new passphrase", confirm: "a new passphrase" });
+  });
+
+  it("says when the two passwords differ, on the second box", () => {
+    const result = newPasswordSchema.safeParse({
+      password: "a new passphrase",
+      confirm: "a new passphrase!",
+    });
+    expect(result.success).toBe(false);
+    expect(firstError(result)).toBe("The two passwords are not the same");
+    expect(result.error?.issues[0]?.path).toEqual(["confirm"]);
+  });
+
+  it("checks the length before anything else", () => {
+    const result = newPasswordSchema.safeParse({
+      password: "short",
+      confirm: "short",
+    });
+    expect(firstError(result)).toBe("Use at least 8 characters");
+  });
 });

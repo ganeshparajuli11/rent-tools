@@ -126,26 +126,32 @@ test.describe("rent", () => {
       row.getByRole("button", { name: /^Remove payment of £200/ }),
     ).toBeVisible();
 
-    // The dashboard adds it up: £550 in, £400 to the owner, £150 left.
+    // Today adds it up: £550 in, £400 to the owner, £150 left.
     await page
       .getByRole("navigation", { name: "Main" })
       .getByRole("link", { name: "Today", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Dashboard" }),
+      page.getByRole("heading", {
+        level: 1,
+        name: /^Good (morning|afternoon|evening)\.$/,
+      }),
     ).toBeVisible();
     const figure = (label: string) =>
       page.locator("dl > div").filter({ hasText: label });
-    await expect(figure("Rent expected")).toContainText("£550");
     await expect(figure("Rent received")).toContainText("£550");
-    await expect(figure("Rent owed to owners")).toContainText("£400");
+    await expect(figure("Rent received")).toContainText("of £550");
+    await expect(figure("Late rent")).toContainText("Nobody is late");
     await expect(figure("Left after owners")).toContainText("£150");
-    await expect(
-      page.getByText("Nobody is late with their rent."),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Every room and home has a tenant."),
-    ).toBeVisible();
+    await expect(figure("Left after owners")).toContainText(
+      "£400 owed to owners for 1 home",
+    );
+    await expect(figure("Rooms let")).toContainText("1");
+    await expect(page.getByText("Nothing needs you right now.")).toBeVisible();
+    const rentFilter = page.getByRole("navigation", { name: "Filter rent" });
+    await expect(rentFilter.getByRole("link", { name: /^Paid/ })).toHaveText(
+      /Paid\s*1/,
+    );
 
     // Remove the £200 payment: the rent is part paid again, and Undo puts it back.
     await page.goto("/rent");

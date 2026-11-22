@@ -8,7 +8,5 @@ export default function DashboardError({
   error: Error;
   retry: () => void;
 }) {
-  return (
-    <ErrorState title="We could not load your dashboard" onRetry={retry} />
-  );
+  return <ErrorState title="We could not load Today" onRetry={retry} />;
 }

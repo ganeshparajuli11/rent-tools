@@ -6,16 +6,19 @@
 // .env.local, so it fills whichever Supabase project .env.local points at.
 // It creates (or re-creates) ONE account and touches nothing else:
 //
-//   email:    TEST_LOGIN_EMAIL    (default test@rentdesk.test)
-//   password: TEST_LOGIN_PASSWORD (default test@123)
+//   email:    DEMO_EMAIL    (default test@rentdesk.test)
+//   password: DEMO_PASSWORD (default test@123)
+//
+// (The old names TEST_LOGIN_EMAIL and TEST_LOGIN_PASSWORD still work.)
 //
 // The account gets 4 homes, rooms, owners, tenants (one moved out), several
 // months of rent with paid, late, part-paid and due months, and drawn
 // pictures for each home. Running it again deletes the demo account and
 // everything in it, then makes it fresh.
 //
-// To sign in with the password, set ENABLE_TEST_LOGIN=true for the app
-// (see src/server/test-login.ts). Needs the property photos migration.
+// Sign in on the normal sign-in page with that email and password (real
+// email and password sign-in, roadmap B1). Fictional data only.
+// Needs the property photos migration.
 
 import { randomUUID } from "node:crypto";
 
@@ -23,10 +26,19 @@ import { createClient } from "@supabase/supabase-js";
 
 import { bedroom, houseFront, kitchen, livingRoom } from "./demo-pictures.mjs";
 
-const EMAIL = (process.env.TEST_LOGIN_EMAIL || "test@rentdesk.test")
+const EMAIL = (
+  process.env.DEMO_EMAIL ||
+  process.env.TEST_LOGIN_EMAIL ||
+  "test@rentdesk.test"
+)
   .trim()
   .toLowerCase();
-const PASSWORD = process.env.TEST_LOGIN_PASSWORD || "test@123";
+const PASSWORD =
+  process.env.DEMO_PASSWORD || process.env.TEST_LOGIN_PASSWORD || "test@123";
+if (PASSWORD.length < 8) {
+  console.error("DEMO_PASSWORD must be at least 8 characters.");
+  process.exit(1);
+}
 const BUCKET = "property-photos";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -573,9 +585,6 @@ async function main() {
       `${counts.charges} months of rent, ${counts.payments} payments, ${counts.photos} pictures.`,
   );
   console.log(`\nSign in with:\n  email:    ${EMAIL}\n  password: ${PASSWORD}`);
-  console.log(
-    "\nPassword sign-in only shows when the app has ENABLE_TEST_LOGIN=true.",
-  );
 }
 
 main().catch((error) => {

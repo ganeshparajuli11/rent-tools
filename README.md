@@ -56,18 +56,17 @@ Open http://localhost:3000.
 All variables are listed with comments in [`.env.example`](.env.example).
 Put real values in `.env.local`, which git ignores. Never commit real keys.
 
-| Variable                               | Where it is used                                    | Required                              |
-| -------------------------------------- | --------------------------------------------------- | ------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Browser + server                                    | Yes                                   |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server (replaces the legacy anon key)     | Yes                                   |
-| `SUPABASE_SERVICE_ROLE_KEY`            | Server only. Bypasses RLS                           | Yes, when server code uses it         |
-| `RESEND_API_KEY`                       | Server only                                         | When sending email                    |
-| `EMAIL_FROM`                           | Server only. Sender on a domain verified in Resend  | When sending email                    |
-| `UPSTASH_REDIS_REST_URL`               | Server only                                         | Production (skipped locally if unset) |
-| `UPSTASH_REDIS_REST_TOKEN`             | Server only                                         | Production (skipped locally if unset) |
-| `CRON_SECRET`                          | Server only. Secret header for the daily cron       | Production (cron is refused if unset) |
-| `NEXT_PUBLIC_APP_URL`                  | Links and auth redirects                            | Defaults to `http://localhost:3000`   |
-| `ENABLE_TEST_LOGIN`                    | Server only. `true` shows the demo password sign-in | Testing only. Never in real use       |
+| Variable                               | Where it is used                                   | Required                              |
+| -------------------------------------- | -------------------------------------------------- | ------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Browser + server                                   | Yes                                   |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server (replaces the legacy anon key)    | Yes                                   |
+| `SUPABASE_SERVICE_ROLE_KEY`            | Server only. Bypasses RLS                          | Yes, when server code uses it         |
+| `RESEND_API_KEY`                       | Server only                                        | When sending email                    |
+| `EMAIL_FROM`                           | Server only. Sender on a domain verified in Resend | When sending email                    |
+| `UPSTASH_REDIS_REST_URL`               | Server only                                        | Production (skipped locally if unset) |
+| `UPSTASH_REDIS_REST_TOKEN`             | Server only                                        | Production (skipped locally if unset) |
+| `CRON_SECRET`                          | Server only. Secret header for the daily cron      | Production (cron is refused if unset) |
+| `NEXT_PUBLIC_APP_URL`                  | Links and auth redirects                           | Defaults to `http://localhost:3000`   |
 
 How they are checked:
 
@@ -304,10 +303,10 @@ paid, late, part-paid and due months, and drawn pictures for each home. Run
 it again to reset it. It only ever touches the demo account.
 
 - Email `test@rentdesk.test`, password `test@123` (change them with
-  `TEST_LOGIN_EMAIL` and `TEST_LOGIN_PASSWORD`).
-- The sign-in page only shows "Testing: sign in with a password" when the app
-  has `ENABLE_TEST_LOGIN=true`, and it only accepts the demo email.
-- **Remove `ENABLE_TEST_LOGIN` before real landlords use the app.**
+  `DEMO_EMAIL` and `DEMO_PASSWORD`; at least 8 characters). Sign in on the
+  normal sign-in page.
+- `ENABLE_TEST_LOGIN` is gone: real email and password sign-in replaced the
+  test-only password box. Remove the variable from Vercel if it is set.
 
 ## Data rights
 
@@ -354,16 +353,34 @@ Owners can download their data and remove a past tenant's personal details.
 
 ## Sign in
 
-Passwordless. The person enters their email, gets a 6-digit code (and a link)
-by email, and types the code in. New emails get an account automatically.
+Three ways in, all through Supabase Auth (decision D-12):
+
+- **Email and password** (the main one): `/sign-up` creates an account,
+  `/sign-in` signs in. Passwords need at least 8 characters (at most 72).
+- **Email me a sign-in code** (`/sign-in/code`): the person gets a 6-digit
+  code (and a link) by email and types the code in. New emails get an
+  account automatically.
+- **Forgot your password?** (`/reset-password`): emails a link that signs
+  the person in for one step, "Choose a new password"
+  (`/reset-password/new`). The answer is the same whether or not the email
+  has an account.
+
+Every sign-in action is validated with Zod and rate limited (10 tries per IP
+and 5 per account every 15 minutes). Errors are plain; sign-up and reset give the same answer whether or not an
+email has an account. Links in emails land on `/auth/confirm`, which
+only ever redirects to fixed pages.
 
 Supabase dashboard settings this needs (hosted project):
 
 1. **Authentication → Emails → Templates**: paste
    `supabase/templates/magic-link.html` into both **Magic Link** and
-   **Confirm signup**. The default templates only contain a link, not the code.
+   **Confirm signup**, and `supabase/templates/reset-password.html` into
+   **Reset Password**. The default templates only contain a link, not the
+   code, and their links only work in the same browser.
 2. **Authentication → URL Configuration**: Site URL = your app URL
-   (`http://localhost:3000` for the dev project).
-3. **Authentication → Emails → SMTP**: set up custom SMTP (for example Resend).
+   (`http://localhost:3000` for the dev project), and add
+   `<your app URL>/auth/confirm` to the Redirect URLs.
+3. **Authentication → Providers → Email**: minimum password length 8.
+4. **Authentication → Emails → SMTP**: set up custom SMTP (for example Resend).
    Supabase's built-in email sender is only for testing and allows very few
    emails per hour.

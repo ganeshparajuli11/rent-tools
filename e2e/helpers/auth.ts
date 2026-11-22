@@ -24,13 +24,18 @@ function admin() {
   );
 }
 
-export async function createTestUser() {
+/**
+ * A throwaway, confirmed user. Pass `password` to give it one, for the
+ * email and password sign-in tests.
+ */
+export async function createTestUser({ password }: { password?: string } = {}) {
   const client = admin();
   const email = `e2e-${randomUUID().slice(0, 8)}@example.com`;
 
   const { data, error } = await client.auth.admin.createUser({
     email,
     email_confirm: true,
+    ...(password ? { password } : {}),
   });
   if (error || !data.user)
     throw new Error(`create user failed: ${error?.message}`);
@@ -50,6 +55,18 @@ export async function createTestUser() {
     await page.waitForURL("**/dashboard");
   }
 
+  /** A password reset link, as if the person had asked for one. */
+  async function resetLink() {
+    const link = await client.auth.admin.generateLink({
+      type: "recovery",
+      email,
+    });
+    if (link.error || !link.data.properties) {
+      throw new Error(`generate link failed: ${link.error?.message}`);
+    }
+    return `/auth/confirm?token_hash=${link.data.properties.hashed_token}&type=recovery`;
+  }
+
   async function cleanup() {
     const { data: memberships } = await client
       .from("memberships")
@@ -62,5 +79,5 @@ export async function createTestUser() {
     await client.auth.admin.deleteUser(userId);
   }
 
-  return { email, signIn, cleanup };
+  return { email, signIn, resetLink, cleanup };
 }

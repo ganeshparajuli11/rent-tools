@@ -16,7 +16,15 @@ export type DashboardHome = {
   id: string;
   name: string;
   archived: boolean;
-  rooms: { id: string; name: string; archived: boolean }[];
+  /** The day the home was added, "YYYY-MM-DD" (for "empty since"). */
+  createdOn?: string;
+  rooms: {
+    id: string;
+    name: string;
+    archived: boolean;
+    /** The day the room was added, "YYYY-MM-DD". */
+    createdOn?: string;
+  }[];
   /** Rent the landlord pays the owner of this home, if they rent it. */
   ownerLeases: {
     rentPence: number;
@@ -35,6 +43,8 @@ export type DashboardHome = {
 };
 
 export type DashboardCharge = {
+  /** The charge's id, for "Mark as paid" on the Today page. */
+  id?: string;
   tenancyId: string;
   periodStart: string;
   dueDate: string;

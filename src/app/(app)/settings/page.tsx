@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 
 import { DataDownloads } from "@/components/settings/data-downloads";
+import { OrganisationDetails } from "@/components/settings/organisation-details";
 import { OverdueEmailSwitch } from "@/components/settings/overdue-email-switch";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/server/auth";
+import { getOrganisationDetails } from "@/server/organisation";
 import { getOverdueEmailSettings, NOT_READY } from "@/server/settings";
 
 export const metadata: Metadata = { title: "Settings" };
 
-/** Settings for the account: the daily late rent email and data downloads. */
+/**
+ * Settings for the account: the organisation's details, the daily late
+ * rent email and data downloads.
+ */
 export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
@@ -18,10 +23,11 @@ export default async function SettingsPage({
   const exportProblem =
     typeof params.export === "string" ? params.export : undefined;
   const supabase = await createClient();
-  const settings = await getOverdueEmailSettings({
-    supabase,
-    userId: user.id,
-  });
+  const ctx = { supabase, userId: user.id };
+  const [settings, organisation] = await Promise.all([
+    getOverdueEmailSettings(ctx),
+    getOrganisationDetails(ctx),
+  ]);
 
   const disabledReason =
     settings.enabled === null
@@ -38,6 +44,12 @@ export default async function SettingsPage({
           {settings.organisationName}
         </p>
       </div>
+
+      <OrganisationDetails
+        name={organisation.name}
+        accountType={organisation.accountType}
+        contactEmail={organisation.contactEmail}
+      />
 
       <OverdueEmailSwitch
         enabled={settings.enabled ?? false}

@@ -43,6 +43,11 @@ test.describe("today", () => {
   }) => {
     await user.signIn(page);
 
+    // The greeting uses the first name from set-up ("Taylor Example").
+    await expect(
+      page.getByRole("heading", { level: 1, name: /, Taylor\.$/ }),
+    ).toBeVisible();
+
     // A brand new account: what to do first, at every width.
     for (const size of WIDTHS) {
       await page.setViewportSize({ width: size.width, height: size.height });

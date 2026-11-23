@@ -10,6 +10,7 @@ import {
   formatShortDate,
   formatTodayLine,
   greetingFor,
+  greetingLine,
   homeCards,
   londonHour,
   longEmptyPlaces,
@@ -141,6 +142,11 @@ describe("dates and greeting", () => {
     expect(londonHour(new Date("2026-07-01T08:30:00Z"))).toBe(9);
     expect(londonHour(new Date("2026-11-22T08:30:00Z"))).toBe(8);
     expect(londonHour(new Date("2026-11-22T23:30:00Z"))).toBe(23);
+  });
+
+  it("adds the first name to the greeting when there is one", () => {
+    expect(greetingLine(9, "Taylor")).toBe("Good morning, Taylor.");
+    expect(greetingLine(19, null)).toBe("Good evening.");
   });
 
   it("says how many things need the user", () => {
@@ -447,6 +453,12 @@ describe("recent activity", () => {
         lookups,
       ),
     ).toBe("Late rent email turned off");
+    expect(
+      describeActivity(
+        entry("organisation.created", { account_type: "landlord" }),
+        lookups,
+      ),
+    ).toBe("Organisation set up");
   });
 
   it("skips actions it does not know", () => {

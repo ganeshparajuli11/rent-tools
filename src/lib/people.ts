@@ -38,11 +38,20 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * "property_manager" -> "Property manager". Organisations have no stored
- * account type until roadmap item B2; until then (and for anything
- * unknown) it is "Property manager", the provisional answer to D-5.
+ * "property_manager" -> "Property manager". Anything missing or unknown is
+ * shown as "Property manager", the provisional answer to D-5 (and the type
+ * organisations made before set-up existed were given).
  */
 export function accountTypeLabel(accountType?: string | null): string {
   const label = accountType ? ACCOUNT_TYPE_LABELS[accountType] : undefined;
   return label ?? "Property manager";
+}
+
+/**
+ * The first name for a greeting: "Taylor Example" -> "Taylor". Null when
+ * there is no name, so the greeting can leave it out.
+ */
+export function firstNameOf(fullName?: string | null): string | null {
+  const first = fullName?.trim().split(/\s+/)[0];
+  return first ? first : null;
 }

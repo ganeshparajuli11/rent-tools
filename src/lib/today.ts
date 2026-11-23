@@ -91,6 +91,16 @@ export function greetingFor(hour: number): string {
   return "Good evening";
 }
 
+/**
+ * The greeting with the person's first name when they gave one: "Good
+ * morning, Taylor." or just "Good morning.".
+ */
+export function greetingLine(hour: number, firstName: string | null): string {
+  return firstName
+    ? `${greetingFor(hour)}, ${firstName}.`
+    : `${greetingFor(hour)}.`;
+}
+
 const NUMBER_WORDS = [
   "No",
   "One",
@@ -650,6 +660,8 @@ export function describeActivity(
     }
     case "data.exported":
       return "Data exported";
+    case "organisation.created":
+      return "Organisation set up";
     case "organisation.overdue_email_changed":
       return field(changes, "overdue_email_enabled") === false
         ? "Late rent email turned off"

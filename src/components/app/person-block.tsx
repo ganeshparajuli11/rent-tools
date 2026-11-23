@@ -5,19 +5,22 @@ import { initialsOf } from "@/lib/people";
 import { cn } from "@/lib/utils";
 
 /**
- * The signed-in person: initials, name and role, with Sign out. People have
- * no stored name until profiles arrive (roadmap item B2), so the email
- * address stands in for it.
+ * The signed-in person: initials, name and role, with Sign out. The name
+ * comes from their profile; until they give one, the email address stands
+ * in for it.
  */
 export function PersonBlock({
+  name,
   email,
   role,
   className,
 }: {
+  name?: string | null;
   email: string;
   role: string | null;
   className?: string;
 }) {
+  const shown = name?.trim() ? name.trim() : email;
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center gap-2.5 px-2.5">
@@ -25,11 +28,11 @@ export function PersonBlock({
           aria-hidden="true"
           className="flex size-8.5 flex-none items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-surface"
         >
-          {initialsOf(email)}
+          {initialsOf(shown)}
         </span>
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-semibold text-ink">
-            {email}
+            {shown}
           </span>
           {role ? (
             <span className="text-xs text-muted-foreground">{role}</span>

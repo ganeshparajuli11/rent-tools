@@ -61,8 +61,9 @@ export async function hasOrganisation(ctx: Ctx): Promise<boolean> {
 }
 
 /**
- * The signed-in person's full name, or null when they have not given one
- * (or the profiles table does not exist yet). Never throws for that.
+ * The signed-in person's full name, or null when they have not given one.
+ * Best effort: the name only decorates pages, so a failed lookup (or a
+ * missing profiles table) gives null instead of taking the page down.
  */
 export async function getFullName(ctx: Ctx): Promise<string | null> {
   const { data, error } = await ctx.supabase
@@ -71,8 +72,10 @@ export async function getFullName(ctx: Ctx): Promise<string | null> {
     .eq("id", ctx.userId)
     .maybeSingle();
   if (error) {
-    if (isNotMigrated(error)) return null;
-    throw error;
+    if (!isNotMigrated(error)) {
+      console.error("[profile] read failed", { code: codeOf(error) });
+    }
+    return null;
   }
   return data?.full_name ?? null;
 }

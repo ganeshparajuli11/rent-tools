@@ -39,7 +39,7 @@ alter table public.organisations
       contact_email is null
       or (
         char_length(contact_email) between 3 and 254
-        and contact_email ~ '^[^@[:space:]]+@[^@[:space:]]+$'
+        and contact_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
       )
     );
 
@@ -67,11 +67,6 @@ comment on table public.profiles is
 
 create trigger set_updated_at before update on public.profiles
   for each row execute function private.set_updated_at();
-
--- Every existing user gets a profile (no name yet).
-insert into public.profiles (id)
-select u.id from auth.users u
-on conflict (id) do nothing;
 
 -- True when the signed-in user and other_user are in the same organisation.
 -- SECURITY DEFINER so it reads memberships without RLS (as is_org_member).
@@ -153,6 +148,12 @@ revoke all on function private.handle_new_user() from public, anon, authenticate
 -- The trigger on auth.users (on_auth_user_created) already calls this
 -- function, so it does not need to be made again.
 
+-- Every existing user gets a profile (no name yet). Done after the trigger
+-- changes, so anyone who signs up from now on is covered either way.
+insert into public.profiles (id)
+select u.id from auth.users u
+on conflict (id) do nothing;
+
 -- ---------------------------------------------------------------------------
 -- 4. Set up an organisation (the /setup screen)
 --
@@ -196,7 +197,7 @@ begin
     raise exception 'Account type is not valid.' using errcode = '22023';
   end if;
   if char_length(clean_email) not between 3 and 254
-     or clean_email !~ '^[^@[:space:]]+@[^@[:space:]]+$' then
+     or clean_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
     raise exception 'Contact email is not valid.' using errcode = '22023';
   end if;
   if char_length(clean_full_name) not between 1 and 200 then

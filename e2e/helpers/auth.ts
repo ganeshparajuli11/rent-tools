@@ -74,17 +74,6 @@ export async function createTestUser({
     throw new Error(`create user failed: ${error?.message}`);
   const userId = data.user.id;
 
-  if (setUp) {
-    const link = await client.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-    });
-    if (link.error || !link.data.properties) {
-      throw new Error(`generate link failed: ${link.error?.message}`);
-    }
-    await setUpOrganisation(email, link.data.properties.hashed_token);
-  }
-
   async function signIn(page: Page) {
     const link = await client.auth.admin.generateLink({
       type: "magiclink",
@@ -122,6 +111,23 @@ export async function createTestUser({
       await client.from("organisations").delete().in("id", orgIds);
     }
     await client.auth.admin.deleteUser(userId);
+  }
+
+  if (setUp) {
+    try {
+      const link = await client.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+      });
+      if (link.error || !link.data.properties) {
+        throw new Error(`generate link failed: ${link.error?.message}`);
+      }
+      await setUpOrganisation(email, link.data.properties.hashed_token);
+    } catch (error) {
+      // Leave nothing behind when set-up fails part way.
+      await cleanup();
+      throw error;
+    }
   }
 
   return { email, userId, signIn, resetLink, cleanup };

@@ -1715,3 +1715,19 @@ Needs a human:
   remove `ENABLE_TEST_LOGIN` from Vercel; delete the merged `auto/*` and
   probe branches; legal check on "remove personal details"; "Remove photo"
   hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests.
+
+Review follow-up (automated reviewers on pull request #10, same run):
+
+- Fixed on `next`: the database contact-email check now needs a dot after
+  the `@` (like the form); the profile backfill runs after the sign-up
+  trigger changes; a failed profile read gives no name instead of failing
+  Today or `/setup`; the e2e helper deletes a half-made test user if set-up
+  fails. Re-checked on the local PostgreSQL and in CI.
+- Not changed, for later items: owners can still add a membership for any
+  user id directly (existing policy since the first schema; now that would
+  also show that person's name), to be closed by invitations in **B4**;
+  the active organisation is "first membership" (ties by time could differ
+  between queries) until the switcher in **B5**; people whose accounts
+  existed before B2 have no way to add their name yet (a profile section in
+  Settings would fit with **B4**). New sign-ups must not hit the old code
+  after the migration: merge straight after applying (in the PR steps).

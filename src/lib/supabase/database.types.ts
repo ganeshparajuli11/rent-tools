@@ -92,6 +92,8 @@ export type Database = {
       };
       organisations: {
         Row: {
+          account_type: string;
+          contact_email: string | null;
           created_at: string;
           id: string;
           name: string;
@@ -99,6 +101,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          account_type?: string;
+          contact_email?: string | null;
           created_at?: string;
           id?: string;
           name: string;
@@ -106,6 +110,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          account_type?: string;
+          contact_email?: string | null;
           created_at?: string;
           id?: string;
           name?: string;
@@ -230,6 +236,27 @@ export type Database = {
             referencedColumns: ["id", "organisation_id"];
           },
         ];
+      };
+      profiles: {
+        Row: {
+          created_at: string;
+          full_name: string | null;
+          id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          full_name?: string | null;
+          id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          full_name?: string | null;
+          id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       properties: {
         Row: {
@@ -500,7 +527,15 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      create_organisation: {
+        Args: {
+          creator_full_name: string;
+          org_account_type: string;
+          org_contact_email: string;
+          org_name: string;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       [_ in never]: never;

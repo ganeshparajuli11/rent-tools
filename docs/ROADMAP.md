@@ -60,7 +60,7 @@ migration is applied.
       option. Rate limits, plain errors, e2e tests. Then remove the test-only
       password box (`src/server/test-login.ts`, `ENABLE_TEST_LOGIN`) and update
       `scripts/seed-demo.mjs` and the README. No migration.
-- [ ] **B2 (L): Organisation setup and profiles.** Migration: `organisations.account_type`
+- [x] **B2 (L): Organisation setup and profiles.** _(on next)_ Migration: `organisations.account_type`
       (landlord / property_manager), `contact_email`; `profiles` (full name);
       change the sign-up trigger so a new user gets a profile but creates the
       organisation through an onboarding screen (name, account type, contact

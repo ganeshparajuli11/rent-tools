@@ -1538,3 +1538,180 @@ Needs a human:
   "Remove photo" hard-deletes instead of archiving; Resend and
   `CRON_SECRET` settings for the late rent email; Dependabot pull
   requests are open.
+
+## 2026-11-23
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md`, `DESIGN_SYSTEM.md`,
+  `DECISIONS.md`, `PENDING_MIGRATIONS.md`, README, AGENTS.md and the last
+  days of this log.
+- Latest CI run on `main` (run 58, commit `b3a9e29`, yesterday's log):
+  passed. No open "Daily build blocked" issue; the `auto/*` branches are
+  from earlier days and already merged. No `next` branch existed.
+- The run has no `add_repo` tool; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, ninth day:** `pnpm install --frozen-lockfile`
+  fails (`registry.npmjs.org` does not resolve; the egress proxy answers
+  403, a policy denial, not retried). So `node_modules` and the Next.js
+  guides in `node_modules/next/dist/docs/` are not readable here; every
+  Step 5 check ran in GitHub Actions on the `next` pull request. New
+  today: **PostgreSQL 16 is in the image**, so the migrations were applied
+  to a local database (with a small stand-in for Supabase's `auth`
+  schema and roles) and the new policies and function were tried there
+  as `authenticated` and `anon`.
+
+### Plan
+
+Today: **B2 (L), Organisation setup and profiles**, the only item (large).
+No decision blocks it.
+
+- Scope: migration for `organisations.account_type` and `contact_email`,
+  a `profiles` table, a sign-up trigger that makes a profile only, and a
+  server-side way to set up an organisation; a `/setup` screen that every
+  app page sends a new account to; names and account types in the shell,
+  Today's greeting and Settings.
+- Files: `supabase/migrations/20261123030000_organisation_setup_and_profiles.sql`,
+  `src/lib/supabase/database.types.ts`, `src/lib/validation/organisation.ts`,
+  `src/server/organisation.ts`, `src/app/(setup)/*`,
+  `src/components/setup/organisation-setup-form.tsx`,
+  `src/app/(app)/layout.tsx`, `src/server/shell.ts`, Today and Settings
+  pages, the guard test, RLS tests, e2e helper and specs, seed script,
+  README.
+- Migration: yes, so it goes to **`next`** (created from `main` today)
+  with pull request #10, "PropDesk next: apply migrations, then merge".
+- Tests: Zod schema tests, `firstNameOf` and greeting tests, the guard test
+  now covers the setup action, RLS tests for profiles and set-up (two
+  organisations plus a third person who joins one as staff), e2e set-up
+  flow at 375, 768 and 1440px.
+- Risks: between applying the migration and merging `next`, a brand new
+  sign-up on the old code would have no organisation (existing accounts
+  are fine), so the PR says to merge straight after applying. Every e2e
+  and RLS test user now needs an organisation set up first.
+
+### Result
+
+| Task                                    | Status                           | Branch          |
+| --------------------------------------- | -------------------------------- | --------------- |
+| B2 (L): Organisation setup and profiles | Done (waiting for its migration) | `next` (PR #10) |
+
+What B2 added:
+
+- **Database** (`20261123030000_organisation_setup_and_profiles.sql`):
+  `organisations.account_type` (landlord / property_manager, not null;
+  existing organisations become property_manager, D-5) and
+  `contact_email` (checked shape; empty for existing organisations).
+  `profiles` (id = the user, full name) with RLS: you see your own profile
+  and those of people you share an organisation with, add or change only
+  your own name (column grants: never id or timestamps), and nobody
+  deletes one. Every existing user got a profile. The sign-up trigger now
+  only makes the profile (name from `full_name` metadata if given).
+  `public.create_organisation(org_name, org_account_type,
+org_contact_email, creator_full_name)`: SECURITY DEFINER, works out the
+  caller from the session, checks every value, takes a per-user lock,
+  refuses a second organisation (`PD001`), then makes the organisation,
+  the owner membership, saves the name and writes `audit_log`
+  (`organisation.created`, account type only) in one transaction. Execute
+  is revoked from `anon` and `public`. Still no insert grant or policy on
+  `organisations`.
+- **`/setup`** ("Set up your organisation"): your full name, organisation
+  name, Landlord or Property manager (radio cards), contact email (starts
+  as the sign-in email). React Hook Form + the shared Zod schema; errors
+  under each field; "Not you? Sign out". The `(app)` layout and Today send
+  anyone without an organisation here; `/setup` sends people who have one
+  to Today.
+- **Shell, Today, Settings:** the sidebar shows the stored account type and
+  the person's name (email until they give one); Today says "Good morning,
+  Taylor."; Settings has an **Organisation** card (name, kind of account,
+  contact email, read-only for now). Recent activity shows "Organisation
+  set up".
+- `getOrganisationId` now says "Please finish setting up your organisation
+  first." when there is none. Seed script makes "Taylor Example", owner of
+  "Demo Lettings", directly with the service role (test setup only).
+
+Checks (GitHub Actions on pull request #10, run 59, commit `a7223bd`;
+passed the first time):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (GitHub Actions)   |
+| `pnpm lint`                        | Passed (GitHub Actions)   |
+| `pnpm format:check`                | Passed (GitHub Actions)   |
+| `pnpm test`                        | Passed (GitHub Actions)   |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (GitHub Actions)   |
+| `pnpm audit --audit-level=high`    | Passed (GitHub Actions)   |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Local stand-ins before pushing: every migration applied in order to a
+local PostgreSQL 16, both on an empty database and on one with an
+organisation made by the old trigger (it became property_manager and its
+user got a profile). As `authenticated` and `anon` there: set-up refused
+signed out, refused each bad value, worked once and refused a second time;
+direct insert into `organisations` refused; profiles visible only to
+yourself and colleagues; another person's name, the id, timestamps and
+deletes all refused; check constraints held. The new schema, people,
+today and guard tests ran under Node's type stripping with a small Vitest
+shim (Zod 4 from the image); Prettier 3.8 on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; hits are
+  only grants to the `service_role` role in SQL and the e2e skip message).
+  No new `NEXT_PUBLIC_` variable; the e2e helper reads the existing
+  publishable key to sign the test user in. No service-role client in app
+  code; the seed script and test setup use it as before.
+- The new action `setUpOrganisationAction`: Zod (`organisationSetupSchema`,
+  extra ids dropped), `runAction` (session, rate limit `setup-write`, the
+  user's own client). There is no organisation to derive yet, so the
+  database function derives everything from `auth.uid()`; it refuses a
+  second organisation and writes `audit_log` itself. The guard test now
+  includes `app/(setup)/` and allows this one function only if it calls
+  `create_organisation` (reviewed list, with the reason).
+- RLS enabled on `profiles` with explicit select / insert / update policies
+  (same for every role: a profile belongs to a person); no delete. Every
+  existing policy and grant unchanged. No raw SQL from input (the RPC takes
+  parameters), no `dangerouslySetInnerHTML`, error text is fixed plain
+  words. The audit row holds the account type only, never names or emails.
+
+Pending migrations: one new, on `next` only
+(`20261123030000_organisation_setup_and_profiles.sql`). The four from 16 to
+19 November are still waiting too.
+
+Decisions made without asking:
+
+- **D-17 (new, provisional):** one organisation per person at set-up;
+  more come by invitation (B4) and the switcher (B5).
+- Existing organisations get no contact email (not copied from the owner's
+  sign-in email); Settings says "Not added yet".
+- The full name is asked on `/setup`, not on the sign-up form, so people
+  who sign in with a code are asked too.
+- `account_type` defaults to property_manager in the database (D-5) but
+  `/setup` makes people choose.
+- Profiles are visible to everyone in a shared organisation (needed for
+  Members in B4). Organisation details are read-only in Settings until a
+  later item adds editing.
+- No new dependencies.
+
+Needs a human:
+
+- **Apply the migrations, then merge pull request #10 straight away.**
+  Apply the four older ones first if not done (`pnpm db:push` applies them
+  in order). After the B2 migration and before the merge, new sign-ups
+  would have no organisation.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally** after applying. New
+  spec `e2e/setup.spec.ts` (screenshots `test-results/screens/setup-*.png`);
+  all test users now get an organisation through `create_organisation`.
+- **Re-run `pnpm seed:demo`** after applying (the demo account is now
+  "Taylor Example").
+- **Try by hand:** sign up with a new email, land on "Set up your
+  organisation", leave everything empty and press the button, then fill it
+  in.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (ninth day).
+- From earlier days (unchanged): Supabase reset template and redirect URL;
+  remove `ENABLE_TEST_LOGIN` from Vercel; delete the merged `auto/*` and
+  probe branches; legal check on "remove personal details"; "Remove photo"
+  hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests.

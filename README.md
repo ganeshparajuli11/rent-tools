@@ -304,7 +304,9 @@ it again to reset it. It only ever touches the demo account.
 
 - Email `test@rentdesk.test`, password `test@123` (change them with
   `DEMO_EMAIL` and `DEMO_PASSWORD`; at least 8 characters). Sign in on the
-  normal sign-in page.
+  normal sign-in page. The account is "Taylor Example", owner of "Demo
+  Lettings" (property manager), so it skips the set-up screen. Needs the
+  organisation set-up migration.
 - `ENABLE_TEST_LOGIN` is gone: real email and password sign-in replaced the
   test-only password box. Remove the variable from Vercel if it is set.
 
@@ -337,8 +339,18 @@ Owners can download their data and remove a past tenant's personal details.
   `supabase/migrations/*_initial_schema.sql`).
 - Members can read, add and change rows. Only owners can delete rows and
   manage memberships. The audit log can be read and added to, never changed.
-- Signing up creates an organisation ("My organisation") with the new user as
-  its owner. An organisation always keeps at least one owner.
+- Signing up creates a **profile** (`profiles`, the person's name) and no
+  organisation. The app then sends the person to **`/setup`** ("Set up your
+  organisation": their full name, the organisation's name, account type
+  Landlord or Property manager, and a contact email). That calls the
+  database function `public.create_organisation`, which works out who is
+  calling from the session, refuses a second organisation (people join more
+  by invitation later), makes the organisation with the caller as owner,
+  saves their name and writes `audit_log` in one transaction. Nobody can
+  insert into `organisations` directly. An organisation always keeps at
+  least one owner.
+- Profiles: you see your own and those of people in your organisations,
+  change only your own name, and never delete one (it goes with the user).
 - Money is stored as whole pence (`integer`), never as decimals.
 - The service role key bypasses RLS. It is only used by the daily cron
   routes (through `src/server/service-client.ts`) and in test setup.
@@ -357,6 +369,8 @@ Three ways in, all through Supabase Auth (decision D-12):
 
 - **Email and password** (the main one): `/sign-up` creates an account,
   `/sign-in` signs in. Passwords need at least 8 characters (at most 72).
+  A new account goes on to `/setup` to set up its organisation; every
+  page of the app sends people there until they have one.
 - **Email me a sign-in code** (`/sign-in/code`): the person gets a 6-digit
   code (and a link) by email and types the code in. New emails get an
   account automatically.

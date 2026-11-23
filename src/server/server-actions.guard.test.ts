@@ -105,14 +105,28 @@ const NO_AUDIT_DATA_FUNCTIONS: Record<string, string> = {
   "search.searchRecords": "reads only",
 };
 
+/**
+ * Data functions for a person who has no organisation yet, so there is
+ * none to look up. Each must hand over to a database function that checks
+ * the session itself and writes audit_log in the same transaction.
+ * Reviewed by hand: add to this list only with a reason.
+ */
+const ORGANISATION_SETUP_DATA_FUNCTIONS: Record<string, RegExp> = {
+  // public.create_organisation: works out the caller from the session,
+  // refuses a second organisation, makes them owner, writes audit_log.
+  "organisation.setUpOrganisation": /\.rpc\("create_organisation",/,
+};
+
 const files = sourceFiles();
 const byPath = new Map(files.map((file) => [file.path, file]));
 // `actions.ts`, or a named one such as `photo-actions.ts`.
 const actionFiles = files.filter((file) =>
   /(^|\/)([\w-]+-)?actions\.ts$/.test(file.path),
 );
-const appActionFiles = actionFiles.filter((file) =>
-  file.path.startsWith("app/(app)/"),
+// The signed-in area, plus organisation set-up (signed in, before the shell).
+const appActionFiles = actionFiles.filter(
+  (file) =>
+    file.path.startsWith("app/(app)/") || file.path.startsWith("app/(setup)/"),
 );
 const routeFiles = files.filter((file) => /(^|\/)route\.ts$/.test(file.path));
 
@@ -126,6 +140,7 @@ describe("server actions", () => {
         "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
         "app/(app)/tenants/actions.ts",
+        "app/(setup)/setup/actions.ts",
       ]),
     );
   });
@@ -181,6 +196,11 @@ describe("server actions", () => {
           const dataFile = byPath.get(modules.get(alias!)!);
           expect(dataFile, `${alias}`).toBeDefined();
           const dataBody = functionBody(dataFile!.text, fn!) ?? "";
+          const setup = ORGANISATION_SETUP_DATA_FUNCTIONS[`${alias}.${fn}`];
+          if (setup) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(setup);
+            continue;
+          }
           expect(dataBody, `${alias}.${fn}`).toMatch(
             /getOrganisationId\(ctx\)/,
           );

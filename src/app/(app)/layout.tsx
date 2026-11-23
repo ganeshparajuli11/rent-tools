@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { BottomBar } from "@/components/app/bottom-bar";
 import { AppLogo } from "@/components/app/app-logo";
 import { OrganisationBlock } from "@/components/app/organisation-block";
@@ -17,10 +19,17 @@ import { getShell, type Shell } from "@/server/shell";
  * requireUser() here is the real check. Pages that load data must also call
  * requireUser() themselves, because layouts don't re-run on every navigation.
  */
-/** The shell's data, or null. A failure here must not take every page down. */
-async function loadShell(userId: string): Promise<Shell | null> {
+/**
+ * The shell's data; "no-organisation" for a new account that has not set
+ * one up yet; or null when loading failed. A failure here must not take
+ * every page down.
+ */
+async function loadShell(
+  userId: string,
+): Promise<Shell | "no-organisation" | null> {
   try {
-    return await getShell({ supabase: await createClient(), userId });
+    const shell = await getShell({ supabase: await createClient(), userId });
+    return shell ?? "no-organisation";
   } catch (error) {
     const code =
       error && typeof error === "object" && "code" in error
@@ -33,9 +42,13 @@ async function loadShell(userId: string): Promise<Shell | null> {
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await requireUser();
-  const shell = await loadShell(user.id);
+  const loaded = await loadShell(user.id);
+  // A new account sets up its organisation first (PRODUCT_SPEC.md §6.1).
+  if (loaded === "no-organisation") redirect("/setup");
+  const shell = loaded;
 
   const email = user.email ?? "Signed in";
+  const name = shell?.fullName ?? null;
   const role = shell?.active.role ?? null;
   const organisation = shell ? (
     <OrganisationBlock
@@ -62,6 +75,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           counts={shell ? { "/homes": shell.propertiesCount } : undefined}
         />
         <PersonBlock
+          name={name}
           email={email}
           role={role}
           className="mt-auto border-t border-border pt-3"
@@ -89,7 +103,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         account={
           <>
             {organisation}
-            <PersonBlock email={email} role={role} />
+            <PersonBlock name={name} email={email} role={role} />
           </>
         }
       />

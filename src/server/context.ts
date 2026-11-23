@@ -39,7 +39,11 @@ export async function getOrganisationId(ctx: Ctx): Promise<string> {
     .maybeSingle();
 
   if (error) throw error;
-  if (!data) throw new UserFacingError("Your account is not set up yet.");
+  if (!data) {
+    throw new UserFacingError(
+      "Please finish setting up your organisation first.",
+    );
+  }
   return data.organisation_id;
 }
 

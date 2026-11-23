@@ -25,10 +25,43 @@ function admin() {
 }
 
 /**
- * A throwaway, confirmed user. Pass `password` to give it one, for the
- * email and password sign-in tests.
+ * Sets up a demo organisation for the user, the way the /setup screen
+ * does: signed in as them (publishable key, so RLS and the database
+ * function's own checks apply), never with the service role.
  */
-export async function createTestUser({ password }: { password?: string } = {}) {
+async function setUpOrganisation(email: string, hashedToken: string) {
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const signedIn = await client.auth.verifyOtp({
+    type: "email",
+    token_hash: hashedToken,
+  });
+  if (signedIn.error) {
+    throw new Error(`sign in for set-up failed: ${signedIn.error.message}`);
+  }
+  const { error } = await client.rpc("create_organisation", {
+    org_name: "E2E Demo Lettings",
+    org_account_type: "property_manager",
+    org_contact_email: email,
+    creator_full_name: "Taylor Example",
+  });
+  if (error) throw new Error(`set up organisation failed: ${error.message}`);
+  await client.auth.signOut({ scope: "local" });
+}
+
+/**
+ * A throwaway, confirmed user. Pass `password` to give it one, for the
+ * email and password sign-in tests. The user gets a demo organisation
+ * ("E2E Demo Lettings", owner "Taylor Example") unless `setUp` is false,
+ * in which case they land on the set-up screen.
+ */
+export async function createTestUser({
+  password,
+  setUp = true,
+}: { password?: string; setUp?: boolean } = {}) {
   const client = admin();
   const email = `e2e-${randomUUID().slice(0, 8)}@example.com`;
 
@@ -41,6 +74,17 @@ export async function createTestUser({ password }: { password?: string } = {}) {
     throw new Error(`create user failed: ${error?.message}`);
   const userId = data.user.id;
 
+  if (setUp) {
+    const link = await client.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    if (link.error || !link.data.properties) {
+      throw new Error(`generate link failed: ${link.error?.message}`);
+    }
+    await setUpOrganisation(email, link.data.properties.hashed_token);
+  }
+
   async function signIn(page: Page) {
     const link = await client.auth.admin.generateLink({
       type: "magiclink",
@@ -52,7 +96,8 @@ export async function createTestUser({ password }: { password?: string } = {}) {
     await page.goto(
       `/auth/confirm?token_hash=${link.data.properties.hashed_token}&type=email`,
     );
-    await page.waitForURL("**/dashboard");
+    // Without an organisation, the app sends them to set one up.
+    await page.waitForURL(setUp ? "**/dashboard" : "**/setup");
   }
 
   /** A password reset link, as if the person had asked for one. */
@@ -79,5 +124,5 @@ export async function createTestUser({ password }: { password?: string } = {}) {
     await client.auth.admin.deleteUser(userId);
   }
 
-  return { email, signIn, resetLink, cleanup };
+  return { email, userId, signIn, resetLink, cleanup };
 }

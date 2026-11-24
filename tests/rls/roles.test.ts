@@ -56,11 +56,14 @@ type Person = {
   membershipId: string;
 };
 
-function must<T>(result: { data: T | null; error: unknown }, what: string): T {
-  if (result.error || result.data === null) {
+function must<T>(
+  result: { data: T; error: unknown },
+  what: string,
+): NonNullable<T> {
+  if (result.error || result.data === null || result.data === undefined) {
     throw new Error(`${what} failed: ${JSON.stringify(result.error)}`);
   }
-  return result.data;
+  return result.data as NonNullable<T>;
 }
 
 async function signedInUser(label: string) {

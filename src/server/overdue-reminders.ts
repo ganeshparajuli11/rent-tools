@@ -118,6 +118,7 @@ export function ownerEmailLookup(db: Db) {
       .select("user_id")
       .eq("organisation_id", organisationId)
       .eq("role", "owner")
+      .eq("status", "active")
       .order("created_at", { ascending: true });
     if (error) throw error;
 

@@ -5,6 +5,7 @@ import {
   getOrganisationId,
   isOrganisationOwner as isOwner,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -23,7 +24,6 @@ import {
 
 export const NOT_READY =
   "This setting is not ready yet. It will be switched on soon.";
-const OWNERS_ONLY = "Only the account owner can change this.";
 
 export type OverdueEmailSettings = {
   organisationName: string;
@@ -76,10 +76,7 @@ export async function setOverdueEmailEnabled(
   ctx: Ctx,
   enabled: boolean,
 ): Promise<{ enabled: boolean }> {
-  const organisationId = await getOrganisationId(ctx);
-  if (!(await isOwner(ctx, organisationId))) {
-    throw new UserFacingError(OWNERS_ONLY);
-  }
+  const { organisationId } = await requireRole(ctx, "owner");
 
   const { data, error } = await ctx.supabase
     .from("organisations")

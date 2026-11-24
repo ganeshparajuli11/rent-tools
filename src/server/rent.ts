@@ -17,6 +17,7 @@ import {
   type Ctx,
   getOrganisationId,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -449,7 +450,7 @@ export async function recordPayment(
   chargeId: string,
   amount: "rest" | number,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "staff");
   const charge = await loadCharge(ctx, organisationId, chargeId);
   if (!charge) throw new UserFacingError(NOT_FOUND);
 
@@ -503,7 +504,7 @@ export async function recordPayment(
 
 /** "Remove" a payment: it stays in the database but no longer counts. */
 export async function removePayment(ctx: Ctx, paymentId: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "staff");
 
   const { data, error } = await ctx.supabase
     .from("payments")
@@ -537,7 +538,7 @@ export async function removePayment(ctx: Ctx, paymentId: string) {
 
 /** Undo for "Remove": the payment counts again, if the rent still has room for it. */
 export async function restorePayment(ctx: Ctx, paymentId: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "staff");
 
   const { data: payment, error: readError } = await ctx.supabase
     .from("payments")

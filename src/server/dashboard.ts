@@ -63,7 +63,9 @@ export async function getDashboard(
     .from("memberships")
     .select("organisation_id, organisations(name)")
     .eq("user_id", ctx.userId)
+    .eq("status", "active")
     .order("created_at", { ascending: true })
+    .order("organisation_id", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (membershipError) throw membershipError;

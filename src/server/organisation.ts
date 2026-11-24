@@ -55,6 +55,7 @@ export async function hasOrganisation(ctx: Ctx): Promise<boolean> {
     .from("memberships")
     .select("organisation_id")
     .eq("user_id", ctx.userId)
+    .eq("status", "active")
     .limit(1);
   if (error) throw error;
   return data.length > 0;

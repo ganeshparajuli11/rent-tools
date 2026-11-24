@@ -14,6 +14,7 @@ import {
   type Ctx,
   getOrganisationId,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -332,7 +333,7 @@ function roomRows(
 }
 
 export async function createHome(ctx: Ctx, values: CreateHomeValues) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: home, error } = await ctx.supabase
     .from("properties")
@@ -404,7 +405,7 @@ export async function updateHome(
   id: string,
   values: UpdateHomeValues,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
   const before = await getHome(ctx, id);
   if (!before) throw new UserFacingError(NOT_FOUND);
 
@@ -507,7 +508,7 @@ export async function updateHome(
 }
 
 export async function setHomeArchived(ctx: Ctx, id: string, archived: boolean) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   // A home with tenants living in it stays on the list.
   if (
@@ -542,7 +543,7 @@ export async function setHomeArchived(ctx: Ctx, id: string, archived: boolean) {
 }
 
 export async function addRoom(ctx: Ctx, propertyId: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: home, error } = await ctx.supabase
     .from("properties")
@@ -591,7 +592,7 @@ export async function addRoom(ctx: Ctx, propertyId: string) {
 }
 
 export async function renameRoom(ctx: Ctx, roomId: string, name: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: before } = await ctx.supabase
     .from("rooms")
@@ -625,7 +626,7 @@ export async function setRoomArchived(
   roomId: string,
   archived: boolean,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   if (archived) {
     // A room with a tenant living in it cannot be archived.

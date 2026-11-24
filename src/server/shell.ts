@@ -1,6 +1,7 @@
 import "server-only";
 
 import { accountTypeLabel, roleLabel } from "@/lib/people";
+import { hasRole } from "@/lib/roles";
 
 import type { Ctx } from "./context";
 import { getFullName } from "./organisation";
@@ -23,7 +24,12 @@ export type ShellOrganisation = {
 
 export type Shell = {
   organisations: ShellOrganisation[];
-  active: ShellOrganisation & { role: string };
+  active: ShellOrganisation & {
+    /** The person's role, for showing: "Owner", "Staff"... */
+    role: string;
+    /** Managers and above add homes and tenants; staff only look. */
+    canAdd: boolean;
+  };
   /** Homes that are not archived. */
   propertiesCount: number;
   /** The person's full name from their profile, if they gave one. */
@@ -36,6 +42,7 @@ export async function getShell(ctx: Ctx): Promise<Shell | null> {
     .from("memberships")
     .select("organisation_id, role, organisations(id, name, account_type)")
     .eq("user_id", ctx.userId)
+    .eq("status", "active")
     .order("created_at", { ascending: true })
     .order("organisation_id", { ascending: true })
     .limit(50);
@@ -62,7 +69,11 @@ export async function getShell(ctx: Ctx): Promise<Shell | null> {
 
   return {
     organisations,
-    active: { ...organisations[0]!, role: roleLabel(first.role) },
+    active: {
+      ...organisations[0]!,
+      role: roleLabel(first.role),
+      canAdd: hasRole(first.role, "manager"),
+    },
     propertiesCount: count ?? 0,
     fullName,
   };

@@ -3,6 +3,8 @@ import { join, relative, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import type { Role } from "@/lib/roles";
+
 /**
  * Guards for every way the browser can change data: server actions and
  * route handlers. These read the source files, so a new action that skips a
@@ -13,7 +15,9 @@ import { describe, expect, it } from "vitest";
  *  - go through `runAction` (src/server/run-action.ts), which checks the
  *    session and applies the rate limiter, and
  *  - call a data function in src/server/ that derives the organisation on
- *    the server (`getOrganisationId`) and writes `audit_log` (`writeAudit`).
+ *    the server and checks the person's role (`requireRole`, with the role
+ *    listed in DATA_FUNCTION_ROLES below), and writes `audit_log`
+ *    (`writeAudit`).
  *
  * The sign-in actions run before there is a session, so they are listed
  * by name below and checked for a rate limit and Zod instead. Every route
@@ -117,6 +121,42 @@ const ORGANISATION_SETUP_DATA_FUNCTIONS: Record<string, RegExp> = {
   "organisation.setUpOrganisation": /\.rpc\("create_organisation",/,
 };
 
+/**
+ * The least role each data function behind a server action needs
+ * (PRODUCT_SPEC.md §5: owner > admin > manager > staff). The guard checks
+ * the function starts with `requireRole(ctx, "<role>")`, so changing a
+ * role limit means changing this list too. Row-level security enforces the
+ * same limits in the database (supabase/migrations/20261124030000_*).
+ * A new data function must be added here, with its role.
+ */
+const DATA_FUNCTION_ROLES: Record<string, Role> = {
+  // Homes, rooms and photos: managers and above.
+  "homes.createHome": "manager",
+  "homes.updateHome": "manager",
+  "homes.setHomeArchived": "manager",
+  "homes.addRoom": "manager",
+  "homes.renameRoom": "manager",
+  "homes.setRoomArchived": "manager",
+  "photos.preparePhotoUpload": "manager",
+  "photos.addPhoto": "manager",
+  "photos.removePhoto": "manager",
+  // Tenants: managers and above. Removing a past tenant's details cannot
+  // be undone: owners only.
+  "tenants.createTenant": "manager",
+  "tenants.updateTenant": "manager",
+  "tenants.moveTenantOut": "manager",
+  "tenants.undoMoveTenantOut": "manager",
+  "tenants.removeTenantDetails": "owner",
+  // Rent payments are operational: every role, staff included.
+  "rent.recordPayment": "staff",
+  "rent.removePayment": "staff",
+  "rent.restorePayment": "staff",
+  // Organisation settings: owners only.
+  "settings.setOverdueEmailEnabled": "owner",
+  // Reads only: anyone in the organisation (getOrganisationId is enough).
+  "search.searchRecords": "staff",
+};
+
 const files = sourceFiles();
 const byPath = new Map(files.map((file) => [file.path, file]));
 // `actions.ts`, or a named one such as `photo-actions.ts`.
@@ -201,9 +241,22 @@ describe("server actions", () => {
             expect(dataBody, `${alias}.${fn}`).toMatch(setup);
             continue;
           }
-          expect(dataBody, `${alias}.${fn}`).toMatch(
-            /getOrganisationId\(ctx\)/,
-          );
+          const role = DATA_FUNCTION_ROLES[`${alias}.${fn}`];
+          expect(
+            role,
+            `${alias}.${fn} needs a role in DATA_FUNCTION_ROLES`,
+          ).toBeDefined();
+          const readsOnly = Boolean(NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]);
+          if (readsOnly && role === "staff") {
+            // Any active member: the organisation look-up is the check.
+            expect(dataBody, `${alias}.${fn}`).toMatch(
+              /getOrganisationId\(ctx\)|requireRole\(ctx, "staff"\)/,
+            );
+          } else {
+            expect(dataBody, `${alias}.${fn}`).toContain(
+              `requireRole(ctx, "${role}")`,
+            );
+          }
           if (NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]) continue;
           expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
         }
@@ -221,6 +274,29 @@ describe("server actions", () => {
     // The user's own client, so RLS applies.
     expect(body).toMatch(/createClient\(\)/);
     expect(body).not.toMatch(/service/i);
+  });
+
+  it("every role in DATA_FUNCTION_ROLES belongs to a real data function", () => {
+    for (const key of Object.keys(DATA_FUNCTION_ROLES)) {
+      const [module, fn] = key.split(".");
+      const file = byPath.get(`server/${module}.ts`);
+      expect(file, key).toBeDefined();
+      expect(functionBody(file!.text, fn!), key).not.toBeNull();
+    }
+  });
+
+  it("requireRole reads active memberships only and checks the rank", () => {
+    const context = byPath.get("server/context.ts")!.text;
+    expect(functionBody(context, "getMembership")).toMatch(
+      /\.eq\("status", "active"\)/,
+    );
+    expect(functionBody(context, "getOrganisationId")).toMatch(
+      /getMembership\(ctx\)/,
+    );
+    const requireRole = functionBody(context, "requireRole") ?? "";
+    expect(requireRole).toMatch(/getMembership\(ctx\)/);
+    expect(requireRole).toMatch(/hasRole\(membership\.role, min\)/);
+    expect(requireRole).toMatch(/throw new UserFacingError\(/);
   });
 
   it("the sign-in actions are the known ones, rate limited and validated", () => {

@@ -17,6 +17,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { listHomes } from "@/server/homes";
 
 export const metadata: Metadata = { title: "Properties" };
@@ -30,10 +31,12 @@ export default async function HomesPage({ searchParams }: PageProps<"/homes">) {
   const showArchived = params.archived === "1";
 
   const supabase = await createClient();
-  const { homes, total, pageCount } = await listHomes(
-    { supabase, userId: user.id },
-    { page, includeArchived: showArchived, sort },
-  );
+  const ctx = { supabase, userId: user.id };
+  const [{ homes, total, pageCount }, canAdd] = await Promise.all([
+    listHomes(ctx, { page, includeArchived: showArchived, sort }),
+    // Staff can look but not add (docs/DESIGN_SYSTEM.md §8).
+    hasRoleAtLeast(ctx, "manager"),
+  ]);
 
   const isEmpty = total === 0 && !showArchived;
 
@@ -54,7 +57,7 @@ export default async function HomesPage({ searchParams }: PageProps<"/homes">) {
           isEmpty ? undefined : "Every home you let, with its rooms and owner."
         }
         actions={
-          isEmpty ? undefined : (
+          isEmpty || !canAdd ? undefined : (
             <span className="hidden sm:inline-flex">{addHome}</span>
           )
         }
@@ -63,16 +66,22 @@ export default async function HomesPage({ searchParams }: PageProps<"/homes">) {
       {isEmpty ? (
         <EmptyState
           icon={<HousePlusIcon />}
-          title="Add your first home"
-          description="Start with one home you let. You can add its rooms, and the owner if you rent it from someone, in a few short steps."
+          title={canAdd ? "Add your first home" : "No homes yet"}
+          description={
+            canAdd
+              ? "Start with one home you let. You can add its rooms, and the owner if you rent it from someone, in a few short steps."
+              : "Homes your organisation adds will show here."
+          }
           action={
-            <Link
-              href="/homes/new"
-              className={cn(primaryActionClass, "w-full sm:w-auto")}
-            >
-              <PlusIcon aria-hidden="true" className="size-4.5" />
-              Add a home
-            </Link>
+            canAdd ? (
+              <Link
+                href="/homes/new"
+                className={cn(primaryActionClass, "w-full sm:w-auto")}
+              >
+                <PlusIcon aria-hidden="true" className="size-4.5" />
+                Add a home
+              </Link>
+            ) : undefined
           }
         />
       ) : (
@@ -132,7 +141,7 @@ export default async function HomesPage({ searchParams }: PageProps<"/homes">) {
       )}
 
       {/* Phone: the main action stays in reach above the bottom bar. */}
-      {!isEmpty ? (
+      {!isEmpty && canAdd ? (
         <div className="sticky bottom-20 z-30 sm:hidden">
           <Link
             href="/homes/new"

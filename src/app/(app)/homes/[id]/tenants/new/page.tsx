@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { RoleNotice } from "@/components/app/role-notice";
 import { TenantWizard } from "@/components/tenants/tenant-wizard";
 import { buttonVariants } from "@/components/ui/button";
 import { todayInLondon } from "@/lib/dates";
@@ -10,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { getHome } from "@/server/homes";
 
 export const metadata: Metadata = { title: "Add a tenant" };
@@ -33,7 +35,11 @@ export default async function NewTenantPage({
   }
 
   const supabase = await createClient();
-  const home = await getHome({ supabase, userId: user.id }, id);
+  const ctx = { supabase, userId: user.id };
+  const [home, canAdd] = await Promise.all([
+    getHome(ctx, id),
+    hasRoleAtLeast(ctx, "manager"),
+  ]);
   if (!home || home.archived) notFound();
 
   const room = roomValue
@@ -51,6 +57,19 @@ export default async function NewTenantPage({
       Cancel
     </Link>
   );
+
+  if (!canAdd) {
+    return (
+      <div className="flex max-w-xl flex-col gap-6">
+        {backLink}
+        <h1 className="text-2xl font-semibold">Add a tenant</h1>
+        <RoleNotice
+          min="manager"
+          back={{ href: homeHref, label: `Back to ${home.name}` }}
+        />
+      </div>
+    );
+  }
 
   // Let by the room, and no room chosen yet: pick an empty room first.
   if (!room && home.rooms.length > 0) {

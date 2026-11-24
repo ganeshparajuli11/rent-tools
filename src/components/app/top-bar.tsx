@@ -10,9 +10,10 @@ import { NewMenu } from "./new-menu";
 /**
  * The bar at the top of every signed-in page. Wide screens: the search box
  * (opens the ⌘K dialog) and + New. Phones and tablets: the logo, a search
- * button and + New.
+ * button and + New. + New is left out for people whose role cannot add
+ * anything (staff); the server refuses those changes anyway.
  */
-export function TopBar() {
+export function TopBar({ canAdd }: { canAdd: boolean }) {
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
@@ -42,7 +43,7 @@ export function TopBar() {
         >
           <SearchIcon aria-hidden="true" className="size-4.5" />
         </button>
-        <NewMenu />
+        {canAdd ? <NewMenu /> : null}
       </div>
 
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />

@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { getHome } from "@/server/homes";
 import { listHomePhotos } from "@/server/photos";
 
@@ -58,9 +59,11 @@ export default async function HomeDetailPage({
 
   const supabase = await createClient();
   const ctx = { supabase, userId: user.id };
-  const [home, photos] = await Promise.all([
+  const [home, photos, canManage] = await Promise.all([
     getHome(ctx, id),
     listHomePhotos(ctx, id),
+    // Staff can look but not change (docs/DESIGN_SYSTEM.md §8).
+    hasRoleAtLeast(ctx, "manager"),
   ]);
   if (!home) notFound();
 
@@ -132,13 +135,15 @@ export default async function HomeDetailPage({
           ) : null
         }
         actions={
-          <Link
-            href={`/homes/${home.id}/edit`}
-            className={cn(secondaryActionClass, "w-full sm:w-auto")}
-          >
-            <PencilIcon aria-hidden="true" className="size-4.5" />
-            Edit home
-          </Link>
+          canManage ? (
+            <Link
+              href={`/homes/${home.id}/edit`}
+              className={cn(secondaryActionClass, "w-full sm:w-auto")}
+            >
+              <PencilIcon aria-hidden="true" className="size-4.5" />
+              Edit home
+            </Link>
+          ) : null
         }
       />
 
@@ -150,7 +155,7 @@ export default async function HomeDetailPage({
           <p className="text-base font-medium">
             This home is archived. It is hidden from your list.
           </p>
-          <RestoreHomeButton homeId={home.id} />
+          {canManage ? <RestoreHomeButton homeId={home.id} /> : null}
         </div>
       ) : null}
 
@@ -177,7 +182,7 @@ export default async function HomeDetailPage({
             homeId={home.id}
             homeName={home.name}
             photos={photos}
-            readOnly={home.archived}
+            readOnly={home.archived || !canManage}
           />
         </div>
       ) : (
@@ -214,7 +219,7 @@ export default async function HomeDetailPage({
                   letType={home.letType}
                   rooms={home.rooms}
                   archivedRooms={home.archivedRooms}
-                  readOnly={home.archived}
+                  readOnly={home.archived || !canManage}
                 />
               </div>
 
@@ -242,7 +247,7 @@ export default async function HomeDetailPage({
                       <p className="text-base text-muted-foreground">
                         Empty. This home has no tenant.
                       </p>
-                      {!home.archived ? (
+                      {!home.archived && canManage ? (
                         <Link
                           href={`/homes/${home.id}/tenants/new`}
                           className={cn(primaryActionClass, "sm:self-start")}
@@ -328,7 +333,7 @@ export default async function HomeDetailPage({
                 )}
               </SectionCard>
 
-              {!home.archived ? (
+              {!home.archived && canManage ? (
                 <section className="flex flex-col gap-2 rounded-[20px] border border-dashed border-border p-4 sm:p-6">
                   <p className="text-base text-muted-foreground">
                     Not letting this home any more? Archive it to hide it from

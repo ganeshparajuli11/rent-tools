@@ -83,7 +83,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar />
+        <TopBar canAdd={shell?.active.canAdd ?? false} />
         {/*
           Left-aligned beside the sidebar, at most 1240px wide. Forms and
           detail pages set their own narrower width inside it.

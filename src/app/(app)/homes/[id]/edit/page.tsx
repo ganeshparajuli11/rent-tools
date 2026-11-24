@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { RoleNotice } from "@/components/app/role-notice";
 import { HomeEditForm } from "@/components/homes/home-edit-form";
 import { penceToPoundsInput } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { getHome } from "@/server/homes";
 
 export const metadata: Metadata = { title: "Edit home" };
@@ -20,7 +22,11 @@ export default async function EditHomePage({
   if (!idSchema.safeParse(id).success) notFound();
 
   const supabase = await createClient();
-  const home = await getHome({ supabase, userId: user.id }, id);
+  const ctx = { supabase, userId: user.id };
+  const [home, canEdit] = await Promise.all([
+    getHome(ctx, id),
+    hasRoleAtLeast(ctx, "manager"),
+  ]);
   if (!home) notFound();
 
   return (
@@ -33,24 +39,33 @@ export default async function EditHomePage({
         Back to {home.name}
       </Link>
       <h1 className="text-2xl font-semibold">Edit home</h1>
-      <HomeEditForm
-        homeId={home.id}
-        activeRoomCount={home.rooms.length}
-        defaultValues={{
-          name: home.name,
-          addressLine1: home.addressLine1,
-          addressLine2: home.addressLine2 ?? "",
-          city: home.city ?? "",
-          postcode: home.postcode,
-          letType: home.letType,
-          roomCount: "",
-          hasOwner: home.owner ? "yes" : "no",
-          ownerName: home.owner?.name ?? "",
-          ownerPhone: home.owner?.phone ?? "",
-          ownerRent: home.owner ? penceToPoundsInput(home.owner.rentPence) : "",
-          ownerDueDay: home.owner ? String(home.owner.dueDay) : "",
-        }}
-      />
+      {!canEdit ? (
+        <RoleNotice
+          min="manager"
+          back={{ href: `/homes/${home.id}`, label: `Back to ${home.name}` }}
+        />
+      ) : (
+        <HomeEditForm
+          homeId={home.id}
+          activeRoomCount={home.rooms.length}
+          defaultValues={{
+            name: home.name,
+            addressLine1: home.addressLine1,
+            addressLine2: home.addressLine2 ?? "",
+            city: home.city ?? "",
+            postcode: home.postcode,
+            letType: home.letType,
+            roomCount: "",
+            hasOwner: home.owner ? "yes" : "no",
+            ownerName: home.owner?.name ?? "",
+            ownerPhone: home.owner?.phone ?? "",
+            ownerRent: home.owner
+              ? penceToPoundsInput(home.owner.rentPence)
+              : "",
+            ownerDueDay: home.owner ? String(home.owner.dueDay) : "",
+          }}
+        />
+      )}
     </div>
   );
 }

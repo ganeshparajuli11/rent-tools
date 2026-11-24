@@ -132,3 +132,42 @@ export async function createTestUser({
 
   return { email, userId, signIn, resetLink, cleanup };
 }
+
+/**
+ * Test setup only (service role): adds `memberId` to the organisation that
+ * `ownerId` set up, with the given role, and returns that organisation's
+ * id. Invitations (roadmap B4) will replace this in the app itself.
+ */
+export async function addToOrganisationOf(
+  ownerId: string,
+  memberId: string,
+  role: "admin" | "manager" | "staff",
+) {
+  const client = admin();
+  const { data: owned, error: readError } = await client
+    .from("memberships")
+    .select("organisation_id")
+    .eq("user_id", ownerId)
+    .eq("role", "owner")
+    .single();
+  if (readError || !owned) {
+    throw new Error(`find organisation failed: ${readError?.message}`);
+  }
+  const organisationId = owned.organisation_id as string;
+  const { error } = await client
+    .from("memberships")
+    .insert({ user_id: memberId, organisation_id: organisationId, role });
+  if (error) throw new Error(`add member failed: ${error.message}`);
+  return organisationId;
+}
+
+/** Test setup only (service role): a demo home in an organisation. */
+export async function addDemoHome(organisationId: string, name: string) {
+  const { data, error } = await admin()
+    .from("properties")
+    .insert({ organisation_id: organisationId, name, postcode: "LS6 1AA" })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`add home failed: ${error?.message}`);
+  return data.id as string;
+}

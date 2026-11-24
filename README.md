@@ -337,8 +337,21 @@ Owners can download their data and remove a past tenant's personal details.
 - Every business table has `organisation_id`. A user sees a row only if they
   are a member of that organisation (Postgres RLS, see
   `supabase/migrations/*_initial_schema.sql`).
-- Members can read, add and change rows. Only owners can delete rows and
-  manage memberships. The audit log can be read and added to, never changed.
+- **Roles** (`memberships.role`, highest first): **owner**, **admin**,
+  **manager**, **staff**. Only **active** memberships (`memberships.status`:
+  active, invited or removed) give any access. Everyone in an organisation
+  reads its rows. Managers and above add and change homes, rooms, owners'
+  rent, tenants and rent charges; every role records rent payments. Only
+  owners change settings, download data, remove a tenant's details or
+  delete rows. Owners change or remove any member; admins any member who is
+  not an owner, and never make anyone an owner. The rules are in RLS (helper
+  `private.has_org_role(org, min_role)`, see
+  `supabase/migrations/*_membership_roles.sql`) and on the server: every
+  data function behind an action starts with `requireRole(ctx, "<role>")`
+  (`src/server/context.ts`), and the guard test lists the role for each.
+  The interface hides what a role cannot do (staff see no **+ New**, no
+  Edit or Archive), but that is never the only check. The audit log can be
+  read and added to, never changed.
 - Signing up creates a **profile** (`profiles`, the person's name) and no
   organisation. The app then sends the person to **`/setup`** ("Set up your
   organisation": their full name, the organisation's name, account type

@@ -1731,3 +1731,178 @@ Review follow-up (automated reviewers on pull request #10, same run):
   existed before B2 have no way to add their name yet (a profile section in
   Settings would fit with **B4**). New sign-ups must not hit the old code
   after the migration: merge straight after applying (in the PR steps).
+
+## 2026-11-24
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md`, `DESIGN_SYSTEM.md`,
+  `DECISIONS.md`, `PENDING_MIGRATIONS.md`, README, AGENTS.md and the last
+  days of this log.
+- Latest CI runs: `main` run 62 (commit `0857852`) and `next` run 63
+  (pull request #10) both passed. No open "Daily build blocked" issue; the
+  `auto/*` branches are from earlier days and already merged or resolved
+  (see earlier entries). `next` already sat on top of `main`, so no rebase
+  was needed at the start.
+- No `add_repo` tool in this run; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, tenth day:** `pnpm install --frozen-lockfile`
+  fails here (`registry.npmjs.org` does not resolve). So the Next.js guides
+  in `node_modules/next/dist/docs/` could not be read (today's code uses
+  only patterns already in the repository), and every Step 5 check ran in
+  GitHub Actions on pull request #10. PostgreSQL 16 is in the image, so the
+  migration was applied and tested on a local database (see below).
+
+### Plan
+
+Today: **B3 (L), Roles**, the only item (large). No decision blocks it.
+
+- Scope: migration for roles owner / admin / manager / staff and
+  `memberships.status`; RLS helper functions by role level; policies per
+  `PRODUCT_SPEC.md` §5; `requireRole` on the server in every data function
+  behind an action; hide what staff cannot do (`DESIGN_SYSTEM.md` §8);
+  tests for every role in two organisations.
+- Files: `supabase/migrations/20261124030000_membership_roles.sql`,
+  `src/lib/supabase/database.types.ts`, `src/lib/roles.ts` (+ test),
+  `src/server/context.ts`, the data functions in `src/server/` (homes,
+  tenants, rent, photos, settings, shell, dashboard, organisation, overdue
+  reminders), the guard test, `src/components/app/role-notice.tsx`, top bar
+  and the homes and tenant pages, `tests/rls/roles.test.ts`,
+  `e2e/roles.spec.ts` and its helpers, README.
+- Migration: yes, so **`next`** (pull request #10, on top of B2).
+- Tests: unit tests for role ranks and messages; the guard test now checks
+  each data function's role; RLS tests for every role in two organisations
+  (reads, business writes, payments, settings, members, removed status);
+  e2e for a staff member at 375, 768 and 1440px.
+- Risks: making existing policies stricter could lock out a flow that
+  relied on the old "any member" rule (checked: rent charges are only made
+  by tenant actions and the service-role cron); replacing policies must not
+  loosen any; the last-owner trigger must also cover `status`.
+
+### Result
+
+| Task          | Status                           | Branch          |
+| ------------- | -------------------------------- | --------------- |
+| B3 (L): Roles | Done (waiting for its migration) | `next` (PR #10) |
+
+What B3 added:
+
+- **Database** (`20261124030000_membership_roles.sql`): the role check now
+  allows owner / admin / manager / staff; `memberships.status` (active,
+  invited, removed; existing rows become active) with an index on
+  `(user_id, status)`. New helpers `private.role_rank`,
+  `private.has_org_role(org, min_role)` (an unknown role name is always
+  false) and `private.has_role_in_path_org` for Storage.
+  `is_org_member`, `is_org_owner`, `is_member_of_path_org` and
+  `shares_organisation_with` count active memberships only. Policies, all
+  stricter than before: managers and above add and change homes, rooms,
+  owner leases, tenancies, rent charges and home photos (table and Storage
+  files); payments stay open to every role; deletes and organisation
+  updates stay owner-only; members are changed or removed by owners
+  (anyone) and admins (anyone but an owner, and never into an owner); only
+  `role` and `status` can be updated (column grant). The keep-an-owner
+  trigger now needs another **active** owner; `create_organisation` counts
+  only active memberships as "already set up".
+- **Server:** `getMembership`, `requireRole(ctx, min)` and
+  `hasRoleAtLeast` in `src/server/context.ts`; every write data function
+  starts with `requireRole` (managers: homes, rooms, photos, tenants;
+  staff: rent payments; owners: late-rent email switch and removing a
+  tenant's details). Plain message: "Only an owner, admin or manager can
+  do this." Every membership look-up (shell, Today, set-up check, overdue
+  email owners) filters `status = active`. The guard test has a
+  `DATA_FUNCTION_ROLES` list and fails if a data function is missing from
+  it or does not start with its role check.
+- **Interface:** staff see no **+ New**, Add a home, Edit home, Archive or
+  Restore, room or photo changes, Add a tenant, Edit tenant or Move out. A
+  saved link to one of those forms shows "You can look, but not change
+  this" with who can.
+
+Checks (GitHub Actions on pull request #10):
+
+| Check                              | Result                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)                                                     |
+| `pnpm typecheck`                   | Failed in run 65 (null checks in the new RLS test), fixed; passed in run 66 |
+| `pnpm lint`                        | Passed (run 66)                                                             |
+| `pnpm format:check`                | Passed (run 66)                                                             |
+| `pnpm test`                        | Passed (run 66)                                                             |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (run 66)                                                             |
+| `pnpm audit --audit-level=high`    | Passed (run 66)                                                             |
+| `pnpm test:rls`                    | Not run here, run locally                                                   |
+| `pnpm test:e2e`                    | Not run here, run locally                                                   |
+
+Local stand-ins before pushing: every migration applied in order to a
+local PostgreSQL 16 (with a small stand-in for Supabase's `auth` and
+`storage` schemas and roles), both on an empty database and on one with
+an old owner + staff organisation (both became active). A scripted test
+ran 137 checks as `authenticated` for each role in two organisations plus
+a removed member: reads, every business write, photos and Storage files,
+payments, audit rows, settings, member changes (admin vs owner, last
+owner, column limits, bad values), cross-organisation attempts, removed
+members seeing nothing and being able to set up their own organisation,
+and the helpers refusing unknown roles and `anon`. All passed. The guard,
+roles and people unit tests ran under Node's type stripping with a small
+Vitest shim (and the guard failed, as it should, when one role check was
+taken out); Prettier on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; hits are
+  only grants to the `service_role` role in SQL and the env-variable names
+  the tests already read). No new `NEXT_PUBLIC_` variable; no service-role
+  client in app code (the e2e helpers and RLS tests use it for test setup
+  only).
+- No new server action or route handler. Every existing action's data
+  function now checks the role on the server as well as the session,
+  organisation (from memberships), Zod and rate limit it already had.
+- No policy, auth check, rate limit or security header was weakened or
+  removed: replaced policies are each stricter, helpers now also require
+  an active membership. RLS was already on for every table; no new table.
+  No raw SQL from input, no `dangerouslySetInnerHTML`, error text is fixed
+  plain words.
+
+Pending migrations: one new, on `next` only
+(`20261124030000_membership_roles.sql`, after B2's
+`20261123030000_organisation_setup_and_profiles.sql`). The four from 16 to
+19 November are still waiting too.
+
+Decisions made without asking:
+
+- **D-18 (new, provisional):** settings, data downloads and removing a
+  tenant's details stay owner-only for now; admins change and remove
+  members (never an owner) but cannot add members directly: that waits for
+  invitations in B4 (an owner could already insert any user id; giving
+  admins the same would widen that known gap).
+- `memberships.status` uses the spec's values (active / invited /
+  removed). Invited rows give no access until B4 makes them active.
+- Removed members keep their row (history) but see nothing, and can set up
+  their own organisation.
+- Rent charges need a manager (they are only made when a tenant is added
+  or changed, and by the cron job with the service role).
+- Home photos need a manager (D-9: no job attachments yet).
+- Staff still see the Settings page (organisation details, read-only);
+  only owners see the switch and data downloads, as before.
+- A staff member in an organisation with no homes still sees Today's
+  "Add a home" first step; the link leads to the role notice. Small; left
+  for E1.
+- No new dependencies.
+
+Needs a human:
+
+- **Apply the migrations, then merge pull request #10 straight away.**
+  `pnpm db:push` applies the older four, then B2, then B3 in order.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally** after applying. New:
+  `tests/rls/roles.test.ts` and `e2e/roles.spec.ts` (screenshots
+  `test-results/screens/roles-staff-*.png`).
+- **Try by hand:** add a second account to your organisation as staff
+  (until B4, in the Supabase table editor: a `memberships` row with role
+  `staff`), sign in as them, check there is no + New or Edit, and that
+  marking rent as paid works.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (tenth day).
+- From earlier days (unchanged): Supabase reset template and redirect URL;
+  remove `ENABLE_TEST_LOGIN` from Vercel; delete the merged `auto/*` and
+  probe branches; legal check on "remove personal details"; "Remove photo"
+  hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests (#1,
+  #2, #3, #5, #6, #11).

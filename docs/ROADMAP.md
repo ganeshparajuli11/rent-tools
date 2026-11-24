@@ -66,7 +66,7 @@ migration is applied.
       organisation through an onboarding screen (name, account type, contact
       email) handled server-side. Existing organisations get account type
       "property_manager" (D-5). → `next`.
-- [ ] **B3 (L): Roles.** Migration: membership roles owner / admin / manager /
+- [x] **B3 (L): Roles.** _(on next)_ Migration: membership roles owner / admin / manager /
       staff and `status`; RLS helper functions by role level; policies per
       `PRODUCT_SPEC.md` §5 (staff cannot export, manage members or change
       settings; only owner and admin manage members; nobody but the owner

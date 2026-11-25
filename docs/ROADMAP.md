@@ -72,7 +72,7 @@ migration is applied.
       settings; only owner and admin manage members; nobody but the owner
       changes the owner). Server-side `requireRole`. RLS tests for every role
       in two organisations. → `next`.
-- [ ] **B4 (L): Members and invites.** Settings › Members: list, change role,
+- [x] **B4 (L): Members and invites.** _(on next)_ Settings › Members: list, change role,
       remove (with confirm), invite by email (an `invitations` table with a
       single-use token and expiry; the email is Supabase Auth's invite or
       magic link, sent from server code; accepting adds the membership).

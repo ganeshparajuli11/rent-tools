@@ -1966,3 +1966,152 @@ blocks it.
   default email limit (a few per hour) means the copyable link matters;
   joining a second organisation only becomes visible with the switcher
   (B5).
+
+### Result
+
+| Task                        | Status                           | Branch          |
+| --------------------------- | -------------------------------- | --------------- |
+| B4 (L): Members and invites | Done (waiting for its migration) | `next` (PR #10) |
+
+What B4 added:
+
+- **Database** (`20261125030000_members_and_invitations.sql`): an
+  `invitations` table (email, role admin / manager / staff, SHA-256 hash of
+  the link token, who invited, 7-day expiry, accepted and cancelled times;
+  never deleted). RLS: owners and admins read, add and cancel or un-cancel
+  their organisation's invitations; nobody else sees any, and the token
+  hash cannot be read through the API at all (column grants). One open
+  invitation per email per organisation. Functions for the invited person:
+  `my_invitations()`, `invitation_for_token(token)` and
+  `accept_invitation(id, full_name)`, all matched on the caller's
+  **confirmed** email; accepting locks the invitation, adds the membership
+  (or re-activates a removed one) with the invited role, saves the name if
+  given and writes `audit_log`. `transfer_ownership(membership, name)`:
+  the active owner, after typing the organisation's name, makes another
+  active member the owner and becomes an admin (audit row in the same
+  transaction). The "Owners can add memberships" policy and the insert
+  grant are gone: memberships now only arrive through
+  `create_organisation` and `accept_invitation` (closes the gap from B3).
+- **Server:** `src/server/members.ts` (list members with names in two
+  queries, paginated; open invitations; invite, cancel, restore, change
+  role, remove, transfer), `src/server/invitations.ts` (the invited
+  person's side), `src/server/invite-email.ts`. Every data function starts
+  with `requireRole` (admin; owner for transfers), works out the
+  organisation on the server and writes `audit_log` with no names or email
+  addresses. Changing or removing refuses yourself and any owner. Invites
+  have their own limit (20 an hour per person) on top of the usual one.
+  The guard test lists every new function with its role, and checks the
+  "not yourself, not an owner" rule and that only the token hash is
+  stored.
+- **Interface:** Settings has a **Members** link (not for staff).
+  `/settings/members`: People (initials, name, "you", join date
+  DD/MM/YYYY; a role select with Undo and Remove with a confirm step for
+  those you may change, a role pill otherwise), pagination, **Invite
+  someone** (email and role; afterwards the link with Copy, and whether
+  the email went), **Waiting to join** (Waiting / Expired, Cancel with
+  Undo), and **Ownership** for the owner (pick a member, then type the
+  organisation's name). Managers see the list read-only; staff get the
+  "You can look, but not change this" notice. `/setup` lists the person's
+  invitations above the set-up form ("You have been invited", with their
+  name asked once if missing), and `/invite/<token>` shows one invitation
+  or a plain reason it cannot be used (used, cancelled, expired, for a
+  different email, not found).
+
+Checks (GitHub Actions on pull request #10):
+
+| Check                              | Result                                                                                                      |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)                                                                                     |
+| `pnpm typecheck`                   | Passed (runs 69 and 70)                                                                                     |
+| `pnpm lint`                        | Passed (runs 69 and 70)                                                                                     |
+| `pnpm format:check`                | Failed in run 69 (`run-action.ts`: Prettier 3.10 formats a long union differently), fixed; passed in run 70 |
+| `pnpm test`                        | Passed (run 70)                                                                                             |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (run 70)                                                                                             |
+| `pnpm audit --audit-level=high`    | Passed (run 70)                                                                                             |
+| `pnpm test:rls`                    | Not run here, run locally                                                                                   |
+| `pnpm test:e2e`                    | Not run here, run locally                                                                                   |
+
+Local stand-ins before pushing: every migration applied in order to a
+local PostgreSQL 16 (with a small stand-in for Supabase's `auth` and
+`storage` schemas and roles). A scripted test ran 77 checks as
+`authenticated` for owner, admin, manager and staff in one organisation,
+an owner in a second, an invited person, an unconfirmed account and a
+stranger: who can invite (and that owner invites, set expiry, set
+inviter and pre-accepted rows are refused), who can see invitations, the
+hidden token hash, cancel and Undo (including the "newer invitation"
+case), accepting only with the matching confirmed email, once and before
+expiry, the audit row without emails, re-joining after removal, "already
+a member", no direct membership inserts, and every ownership-transfer
+refusal plus the transfer itself. All passed. The token helpers were run
+under Node's type stripping; Prettier (3.8, without the Tailwind plugin)
+on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; the hits
+  are SQL grants to the `service_role` role and the env-variable names the
+  tests already read). No new `NEXT_PUBLIC_` variable. The invitation
+  email uses the publishable key with a client that keeps no session; no
+  service-role client in app code (only the existing cron routes; the new
+  RLS test and e2e helpers use it for test set-up only).
+- Every new server action validates with a shared Zod schema and goes
+  through `runAction` (session, rate limit, the person's own client); every
+  data function derives the organisation from memberships, checks the role
+  and writes `audit_log` (accept and transfer write it inside their
+  database function). The invite page rate-limits token look-ups.
+- RLS is on for the new table with explicit policies per action; no policy
+  was loosened (one insert policy was removed, making it stricter). No raw
+  SQL from input, no `dangerouslySetInnerHTML`; error text is fixed plain
+  words. Only the token's hash is stored; the token is shown once, to the
+  inviter.
+
+Pending migrations: one new, on `next` only
+(`20261125030000_members_and_invitations.sql`, after B2 and B3). The four
+from 16 to 19 November are still waiting too.
+
+Decisions made without asking:
+
+- **D-19 (new, provisional):** the invitation email is Supabase's sign-in
+  email (code and link) sent with the publishable key, plus a link to copy;
+  Supabase's "invite" email would need the service-role key in app code.
+- Invitations are matched on the invited person's **confirmed** email, so
+  a forwarded link is useless to anyone else.
+- Invited roles are admin, manager or staff; ownership only moves by
+  transfer. Admins may invite admins (they "manage members").
+- Removing a member sets `memberships.status = removed` (history kept); a
+  new invitation brings them back with the new role. People cannot change
+  their own role or remove themselves here.
+- Managers can read the member list; staff cannot (design system §8).
+- `memberships.status = invited` stays unused: invitations live in their
+  own table, so no membership exists before someone accepts.
+- Someone already in an organisation can accept an invitation to another
+  (from the link); they only see it once the switcher arrives (B5).
+- The transfer list shows members on the current page of the list (25 per
+  page); enough for the pilot.
+- No new dependencies.
+
+Needs a human:
+
+- **Apply the migrations, then merge pull request #10 straight away.**
+  `pnpm db:push` applies the older four, then B2, B3 and B4 in order.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally** after applying. New:
+  `tests/rls/invitations.test.ts` and `e2e/members.spec.ts` (screenshots
+  `test-results/screens/members-*.png`). The e2e sends one real
+  invitation email per width to an `@example.com` address, unless the
+  hourly email limit stops it (the test works either way).
+- **Supabase email limit:** the built-in email sends only a few emails an
+  hour. For real invitations, set up custom SMTP in Supabase
+  (Authentication › Emails). The Members page always shows the link to
+  copy.
+- **Try by hand:** as the owner, invite a second email address as staff;
+  sign in with it (a code arrives, or open the copied link after signing
+  in); join from "You have been invited"; then change their role, Undo,
+  and remove them.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (eleventh day).
+- From earlier days (unchanged): Supabase reset template and redirect URL;
+  remove `ENABLE_TEST_LOGIN` from Vercel; delete the merged `auto/*` and
+  probe branches; legal check on "remove personal details"; "Remove photo"
+  hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests (#1,
+  #2, #3, #5, #6, #11).

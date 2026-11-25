@@ -358,10 +358,27 @@ Owners can download their data and remove a past tenant's personal details.
   Landlord or Property manager, and a contact email). That calls the
   database function `public.create_organisation`, which works out who is
   calling from the session, refuses a second organisation (people join more
-  by invitation later), makes the organisation with the caller as owner,
+  by invitation), makes the organisation with the caller as owner,
   saves their name and writes `audit_log` in one transaction. Nobody can
   insert into `organisations` directly. An organisation always keeps at
   least one owner.
+- **Members and invitations** (Settings › Members, `/settings/members`):
+  owners and admins invite people by email with a role (admin, manager or
+  staff), change roles (with Undo), remove members (with a confirm step;
+  the membership is kept as `removed` for history) and cancel invitations
+  (with Undo). Managers can see the list; staff cannot. Only the owner can
+  transfer ownership: pick a member, then type the organisation's name
+  (`public.transfer_ownership` checks it again); the old owner becomes an
+  admin. An invitation (`invitations`) holds only the SHA-256 hash of the
+  random token in its link, lasts 7 days and works once. The email is
+  Supabase Auth's sign-in email (code and link), sent from server code
+  with the publishable key (`src/server/invite-email.ts`); the inviter
+  also gets the link to copy, since Supabase's built-in email is limited to
+  a few per hour (set up custom SMTP in Supabase to lift that). Once the
+  invited person signs in, `/setup` lists their invitations (matched on
+  their confirmed email), and `/invite/<token>` shows one; joining calls
+  `public.accept_invitation`, which checks the email, adds the membership
+  and writes `audit_log`. Nobody can insert a membership directly.
 - Profiles: you see your own and those of people in your organisations,
   change only your own name, and never delete one (it goes with the user).
 - Money is stored as whole pence (`integer`), never as decimals.

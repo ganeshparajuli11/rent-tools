@@ -55,6 +55,59 @@ export type Database = {
           },
         ];
       };
+      invitations: {
+        Row: {
+          accepted_at: string | null;
+          accepted_by: string | null;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          id: string;
+          invited_by: string | null;
+          organisation_id: string;
+          revoked_at: string | null;
+          role: string;
+          token_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          email: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          organisation_id: string;
+          revoked_at?: string | null;
+          role: string;
+          token_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          organisation_id?: string;
+          revoked_at?: string | null;
+          role?: string;
+          token_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invitations_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       memberships: {
         Row: {
           created_at: string;
@@ -530,6 +583,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      accept_invitation: {
+        Args: { full_name?: string; invitation_id: string };
+        Returns: string;
+      };
       create_organisation: {
         Args: {
           creator_full_name: string;
@@ -538,6 +595,32 @@ export type Database = {
           org_name: string;
         };
         Returns: string;
+      };
+      invitation_for_token: {
+        Args: { invite_token: string };
+        Returns: {
+          expires_at: string;
+          id: string;
+          organisation_name: string;
+          role: string;
+          state: string;
+        }[];
+      };
+      my_invitations: {
+        Args: never;
+        Returns: {
+          expires_at: string;
+          id: string;
+          organisation_name: string;
+          role: string;
+        }[];
+      };
+      transfer_ownership: {
+        Args: {
+          confirm_organisation_name: string;
+          new_owner_membership_id: string;
+        };
+        Returns: undefined;
       };
     };
     Enums: {

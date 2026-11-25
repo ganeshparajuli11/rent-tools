@@ -24,16 +24,22 @@ import { type Ctx, UserFacingError } from "./context";
 const TOO_MANY =
   "You have made a lot of changes quickly. Please wait a minute and try again.";
 
+/** Areas of the app, each with its own rate limit. */
+export const ACTION_SCOPES = [
+  "homes",
+  "tenants",
+  "rent",
+  "settings",
+  "members",
+  "search",
+  "setup",
+] as const;
+
+export type ActionScope = (typeof ACTION_SCOPES)[number];
+
 export async function runAction<T>(
   /** Area of the app, used for the rate limit and the log line. */
-  scope:
-    | "homes"
-    | "tenants"
-    | "rent"
-    | "settings"
-    | "members"
-    | "search"
-    | "setup",
+  scope: ActionScope,
   name: string,
   fn: (ctx: Ctx) => Promise<T>,
 ): Promise<ActionResult<T>> {

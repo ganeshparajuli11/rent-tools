@@ -32,6 +32,18 @@ export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? "Member";
 }
 
+const ROLE_IN_SENTENCE: Record<string, string> = {
+  owner: "the owner",
+  admin: "an admin",
+  manager: "a manager",
+  staff: "staff",
+};
+
+/** For "Taylor is now …": "an admin", "a manager", "staff". */
+export function roleInSentence(role: string): string {
+  return ROLE_IN_SENTENCE[role] ?? "a member";
+}
+
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   landlord: "Landlord",
   property_manager: "Property manager",

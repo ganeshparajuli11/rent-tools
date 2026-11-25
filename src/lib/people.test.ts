@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { accountTypeLabel, firstNameOf, initialsOf, roleLabel } from "./people";
+import {
+  accountTypeLabel,
+  firstNameOf,
+  initialsOf,
+  roleInSentence,
+  roleLabel,
+} from "./people";
 
 describe("initialsOf", () => {
   it("takes the first and last word's first letters", () => {
@@ -57,5 +63,15 @@ describe("firstNameOf", () => {
     expect(firstNameOf(null)).toBe(null);
     expect(firstNameOf(undefined)).toBe(null);
     expect(firstNameOf("   ")).toBe(null);
+  });
+});
+
+describe("roleInSentence", () => {
+  it("reads well after 'is now'", () => {
+    expect(roleInSentence("owner")).toBe("the owner");
+    expect(roleInSentence("admin")).toBe("an admin");
+    expect(roleInSentence("manager")).toBe("a manager");
+    expect(roleInSentence("staff")).toBe("staff");
+    expect(roleInSentence("superadmin")).toBe("a member");
   });
 });

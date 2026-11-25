@@ -1906,3 +1906,63 @@ Needs a human:
   probe branches; legal check on "remove personal details"; "Remove photo"
   hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests (#1,
   #2, #3, #5, #6, #11).
+
+## 2026-11-25
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md`, `DESIGN_SYSTEM.md`,
+  `DECISIONS.md`, `PENDING_MIGRATIONS.md`, README, AGENTS.md and the last
+  days of this log.
+- Latest CI runs: `main` run 67 (commit `9631e86`) and `next` run 68
+  (pull request #10) both passed. No open "Daily build blocked" issue; the
+  `auto/*` branches are from earlier days and already resolved. `next`
+  already sits on top of `main`, so no rebase was needed at the start.
+- No `add_repo` tool in this run; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, eleventh day:** `pnpm install --frozen-lockfile`
+  fails here (`registry.npmjs.org` does not resolve directly, and the egress
+  proxy answers 403 for it). So the Next.js guides in
+  `node_modules/next/dist/docs/` could not be read (today's code uses only
+  Next.js patterns already in the repository), and every Step 5 check runs
+  in GitHub Actions on pull request #10. PostgreSQL 16 is in the image, so
+  the migration is applied and tested on a local database.
+
+### Plan
+
+Today: **B4 (L), Members and invites**, the only item (large). No decision
+blocks it.
+
+- Scope: Settings › Members (list with names, roles and join dates;
+  change role with Undo; remove with a confirm step; invite by email;
+  pending invitations with cancel and Undo; ownership transfer as a
+  two-step confirm for owners). Invitations: an `invitations` table with a
+  single-use token (only its SHA-256 hash is stored) and an expiry;
+  accepting goes through a database function that checks the signed-in
+  person's confirmed email matches the invitation, then adds (or
+  re-activates) the membership and writes `audit_log`. The email is
+  Supabase Auth's magic link / sign-in code, sent from server code with
+  the publishable key (no service role); the inviter also gets the
+  invitation link to copy. Invited people see their invitations on
+  `/setup` (and at `/invite/<token>`). Closes the B3 gap: owners can no
+  longer insert a membership for any user id directly.
+- Files: `supabase/migrations/20261125030000_members_and_invitations.sql`,
+  `src/lib/supabase/database.types.ts`, `src/lib/validation/members.ts`
+  (+ test), `src/lib/invitations.ts` (+ test), `src/server/members.ts`,
+  `src/server/invitations.ts`, `src/server/invite-email.ts`,
+  `src/server/run-action.ts`, `src/app/(app)/settings/members/*`,
+  `src/app/(setup)/setup/*`, `src/app/(setup)/invite/[token]/page.tsx`,
+  `src/components/members/*`, the Settings page, the guard test,
+  `tests/rls/invitations.test.ts`, `e2e/members.spec.ts`, README.
+- Migration: yes, so **`next`** (pull request #10, on top of B2 and B3).
+- Tests: unit tests for the schemas, token hashing and invitation states;
+  guard test entries for every new data function; RLS tests for every role
+  in two organisations (who can see, add and cancel invitations; accepting
+  only with the matching email, once, before expiry; no direct membership
+  inserts; ownership transfer only by an owner who types the name); e2e at
+  375, 768 and 1440px.
+- Risks: the invite email is a generic sign-in email (Supabase's invite
+  template needs the service role, which app code must not use); Supabase's
+  default email limit (a few per hour) means the copyable link matters;
+  joining a second organisation only becomes visible with the switcher
+  (B5).

@@ -26,7 +26,14 @@ const TOO_MANY =
 
 export async function runAction<T>(
   /** Area of the app, used for the rate limit and the log line. */
-  scope: "homes" | "tenants" | "rent" | "settings" | "search" | "setup",
+  scope:
+    | "homes"
+    | "tenants"
+    | "rent"
+    | "settings"
+    | "members"
+    | "search"
+    | "setup",
   name: string,
   fn: (ctx: Ctx) => Promise<T>,
 ): Promise<ActionResult<T>> {

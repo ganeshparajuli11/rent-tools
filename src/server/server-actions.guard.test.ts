@@ -119,6 +119,21 @@ const ORGANISATION_SETUP_DATA_FUNCTIONS: Record<string, RegExp> = {
   // public.create_organisation: works out the caller from the session,
   // refuses a second organisation, makes them owner, writes audit_log.
   "organisation.setUpOrganisation": /\.rpc\("create_organisation",/,
+  // public.accept_invitation: works out the caller from the session, checks
+  // the invitation is theirs (confirmed email) and still open, adds the
+  // membership, writes audit_log.
+  "invitations.acceptInvitation": /\.rpc\("accept_invitation",/,
+};
+
+/**
+ * Data functions whose change and its audit_log row are both written by
+ * one database function, in one transaction. They still check the role on
+ * the server first. Reviewed by hand: add to this list only with a reason.
+ */
+const AUDITED_IN_DATABASE: Record<string, RegExp> = {
+  // public.transfer_ownership checks the caller is the owner and the typed
+  // name, swaps the two roles and writes audit_log.
+  "members.transferOwnership": /\.rpc\("transfer_ownership",/,
 };
 
 /**
@@ -153,6 +168,14 @@ const DATA_FUNCTION_ROLES: Record<string, Role> = {
   "rent.restorePayment": "staff",
   // Organisation settings: owners only.
   "settings.setOverdueEmailEnabled": "owner",
+  // Members and invitations: owners and admins (PRODUCT_SPEC.md §5).
+  // Moving ownership: the owner only.
+  "members.inviteMember": "admin",
+  "members.cancelInvitation": "admin",
+  "members.restoreInvitation": "admin",
+  "members.changeMemberRole": "admin",
+  "members.removeMember": "admin",
+  "members.transferOwnership": "owner",
   // Reads only: anyone in the organisation (getOrganisationId is enough).
   "search.searchRecords": "staff",
 };
@@ -179,6 +202,7 @@ describe("server actions", () => {
         "app/(app)/rent/actions.ts",
         "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
+        "app/(app)/settings/members/actions.ts",
         "app/(app)/tenants/actions.ts",
         "app/(setup)/setup/actions.ts",
       ]),
@@ -258,6 +282,11 @@ describe("server actions", () => {
             );
           }
           if (NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]) continue;
+          const inDatabase = AUDITED_IN_DATABASE[`${alias}.${fn}`];
+          if (inDatabase) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(inDatabase);
+            continue;
+          }
           expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
         }
       },
@@ -297,6 +326,27 @@ describe("server actions", () => {
     expect(requireRole).toMatch(/getMembership\(ctx\)/);
     expect(requireRole).toMatch(/hasRole\(membership\.role, min\)/);
     expect(requireRole).toMatch(/throw new UserFacingError\(/);
+  });
+
+  it("member changes never touch yourself or an owner", () => {
+    const text = byPath.get("server/members.ts")!.text;
+    const check = functionBody(text, "changeableMember") ?? "";
+    expect(check).toMatch(/\.eq\("organisation_id", organisationId\)/);
+    expect(check).toMatch(/data\.user_id === ctx\.userId/);
+    expect(check).toMatch(/data\.role === "owner"/);
+    for (const name of ["changeMemberRole", "removeMember"]) {
+      expect(functionBody(text, name), name).toMatch(
+        /changeableMember\(ctx, organisationId, membershipId\)/,
+      );
+    }
+  });
+
+  it("invitations store only the token's hash", () => {
+    const text = byPath.get("server/members.ts")!.text;
+    const invite = functionBody(text, "inviteMember") ?? "";
+    expect(invite).toMatch(/token_hash: await hashInvitationToken\(token\)/);
+    // A tighter limit than ordinary changes, because each one sends email.
+    expect(invite).toMatch(/rateLimit\("invite-email"/);
   });
 
   it("the sign-in actions are the known ones, rate limited and validated", () => {

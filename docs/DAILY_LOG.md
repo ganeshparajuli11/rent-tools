@@ -2115,3 +2115,7 @@ Needs a human:
   probe branches; legal check on "remove personal details"; "Remove photo"
   hard-deletes; Resend and `CRON_SECRET`; Dependabot pull requests (#1,
   #2, #3, #5, #6, #11).
+
+After pushing: `main` run 71 (this log, commit `f13ea3d`) passed, and
+`next` was rebased onto it; pull request #10's run 72 (commit `93090fc`)
+passed every check.

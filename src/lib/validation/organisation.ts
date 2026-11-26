@@ -46,3 +46,16 @@ export const organisationSetupSchema = z.object({
 
 export type OrganisationSetupInput = z.input<typeof organisationSetupSchema>;
 export type OrganisationSetupValues = z.output<typeof organisationSetupSchema>;
+
+/**
+ * The organisation switcher (roadmap B5): which of the person's
+ * organisations to work in. Only an id; the server checks the person is an
+ * active member of it before using it.
+ */
+export const switchOrganisationSchema = z.object({
+  organisationId: z.uuid({ error: "We could not find that organisation." }),
+});
+
+export type SwitchOrganisationValues = z.output<
+  typeof switchOrganisationSchema
+>;

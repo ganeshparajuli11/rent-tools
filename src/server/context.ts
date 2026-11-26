@@ -2,8 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { pickActiveMembership } from "@/lib/active-organisation";
 import { hasRole, isRole, type Role, roleTooLowMessage } from "@/lib/roles";
 import type { Database, Json } from "@/lib/supabase/database.types";
+
+import { getPreferredOrganisationId } from "./active-organisation";
 
 export type Db = SupabaseClient<Database>;
 
@@ -42,26 +45,59 @@ export type Membership = {
   role: Role | null;
 };
 
+/** How many organisations one person can be in, at most, for the switcher. */
+export const MEMBERSHIP_LIMIT = 50;
+
 /**
  * The user's active membership: their organisation and their role in it.
- * The active organisation is the first one joined, until the switcher
- * (roadmap B5). One query, with the user's own client.
+ * The active organisation is the one they picked in the switcher (a cookie,
+ * roadmap B5) if they are still an active member of it; otherwise the first
+ * one they joined. The cookie is only a wish: the choice is always made
+ * from the person's own active memberships. One query, with the user's own
+ * client.
  */
 export async function getMembership(ctx: Ctx): Promise<Membership> {
-  const { data, error } = await ctx.supabase
-    .from("memberships")
-    .select("organisation_id, role")
-    .eq("user_id", ctx.userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: true })
-    .order("organisation_id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const [memberships, preferred] = await Promise.all([
+    ctx.supabase
+      .from("memberships")
+      .select("organisation_id, role")
+      .eq("user_id", ctx.userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .order("organisation_id", { ascending: true })
+      .limit(MEMBERSHIP_LIMIT),
+    getPreferredOrganisationId(),
+  ]);
+  const { data, error } = memberships;
 
   if (error) throw error;
-  if (!data) throw new UserFacingError(NO_ORGANISATION);
+  const active = pickActiveMembership(data, preferred);
+  if (!active) throw new UserFacingError(NO_ORGANISATION);
   return {
-    organisationId: data.organisation_id,
+    organisationId: active.organisation_id,
+    role: isRole(active.role) ? active.role : null,
+  };
+}
+
+/**
+ * The user's own active membership of one organisation they named (for
+ * the switcher), or null when they are not an active member of it.
+ */
+export async function getMembershipIn(
+  ctx: Ctx,
+  organisationId: string,
+): Promise<{ membershipId: string; role: Role | null } | null> {
+  const { data, error } = await ctx.supabase
+    .from("memberships")
+    .select("id, role")
+    .eq("user_id", ctx.userId)
+    .eq("organisation_id", organisationId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    membershipId: data.id,
     role: isRole(data.role) ? data.role : null,
   };
 }

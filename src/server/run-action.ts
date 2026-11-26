@@ -33,6 +33,7 @@ export const ACTION_SCOPES = [
   "members",
   "search",
   "setup",
+  "switch",
 ] as const;
 
 export type ActionScope = (typeof ACTION_SCOPES)[number];

@@ -126,6 +126,19 @@ const ORGANISATION_SETUP_DATA_FUNCTIONS: Record<string, RegExp> = {
 };
 
 /**
+ * Data functions that act on an organisation the person names rather than
+ * their active one: the organisation switcher (roadmap B5). Each must
+ * first check, with the person's own client, that they are an active
+ * member of that organisation, and refuse otherwise; it still writes
+ * audit_log. Reviewed by hand: add to this list only with a reason.
+ */
+const NAMED_ORGANISATION_DATA_FUNCTIONS: Record<string, RegExp> = {
+  // Any role may switch; the membership check is the permission.
+  "organisation.switchOrganisation":
+    /const membership = await getMembershipIn\(ctx, organisationId\);\s+if \(!membership\) throw new UserFacingError\(/,
+};
+
+/**
  * Data functions whose change and its audit_log row are both written by
  * one database function, in one transaction. They still check the role on
  * the server first. Reviewed by hand: add to this list only with a reason.
@@ -199,6 +212,7 @@ describe("server actions", () => {
       expect.arrayContaining([
         "app/(app)/homes/actions.ts",
         "app/(app)/homes/photo-actions.ts",
+        "app/(app)/organisation-actions.ts",
         "app/(app)/rent/actions.ts",
         "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
@@ -265,6 +279,12 @@ describe("server actions", () => {
             expect(dataBody, `${alias}.${fn}`).toMatch(setup);
             continue;
           }
+          const named = NAMED_ORGANISATION_DATA_FUNCTIONS[`${alias}.${fn}`];
+          if (named) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(named);
+            expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
+            continue;
+          }
           const role = DATA_FUNCTION_ROLES[`${alias}.${fn}`];
           expect(
             role,
@@ -326,6 +346,43 @@ describe("server actions", () => {
     expect(requireRole).toMatch(/getMembership\(ctx\)/);
     expect(requireRole).toMatch(/hasRole\(membership\.role, min\)/);
     expect(requireRole).toMatch(/throw new UserFacingError\(/);
+  });
+
+  it("the active organisation is always one of the person's own active memberships", () => {
+    const context = byPath.get("server/context.ts")!.text;
+    const getMembership = functionBody(context, "getMembership") ?? "";
+    expect(getMembership).toMatch(/\.eq\("user_id", ctx\.userId\)/);
+    expect(getMembership).toMatch(/getPreferredOrganisationId\(\)/);
+    expect(getMembership).toMatch(/pickActiveMembership\(data, preferred\)/);
+
+    const shell = functionBody(byPath.get("server/shell.ts")!.text, "getShell");
+    expect(shell).toMatch(/\.eq\("status", "active"\)/);
+    expect(shell).toMatch(/pickActiveMembership\(data, preferred\)/);
+
+    const membershipIn = functionBody(context, "getMembershipIn") ?? "";
+    expect(membershipIn).toMatch(/\.eq\("user_id", ctx\.userId\)/);
+    expect(membershipIn).toMatch(/\.eq\("organisation_id", organisationId\)/);
+    expect(membershipIn).toMatch(/\.eq\("status", "active"\)/);
+  });
+
+  it("only the switcher and accepting an invitation set the active organisation", () => {
+    const setters = files
+      .filter((file) => file.path !== "server/active-organisation.ts")
+      .filter((file) => /setPreferredOrganisationId\(/.test(file.text))
+      .map((file) => file.path)
+      .sort();
+    expect(setters).toEqual([
+      "server/invitations.ts",
+      "server/organisation.ts",
+    ]);
+    const invitations = functionBody(
+      byPath.get("server/invitations.ts")!.text,
+      "acceptInvitation",
+    );
+    // Only after the database function has made the membership.
+    expect(invitations).toMatch(
+      /\.rpc\("accept_invitation",[\s\S]*setPreferredOrganisationId\(data\)/,
+    );
   });
 
   it("member changes never touch yourself or an owner", () => {

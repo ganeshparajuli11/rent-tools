@@ -2,6 +2,7 @@ import "server-only";
 
 import type { MemberRole } from "@/lib/validation/members";
 
+import { setPreferredOrganisationId } from "./active-organisation";
 import { type Ctx, UserFacingError } from "./context";
 
 /**
@@ -124,5 +125,9 @@ export async function acceptInvitation(
     throw error;
   }
   if (typeof data !== "string") throw new Error("accept_invitation: no id");
+  // The organisation they just joined becomes the active one (roadmap B5).
+  // The id comes from the database function, which has just made the
+  // membership; getMembership checks it again on every request anyway.
+  await setPreferredOrganisationId(data);
   return { organisationId: data };
 }

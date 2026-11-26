@@ -1,9 +1,11 @@
 import "server-only";
 
+import { pickActiveMembership } from "@/lib/active-organisation";
 import { accountTypeLabel, roleLabel } from "@/lib/people";
 import { hasRole } from "@/lib/roles";
 
-import type { Ctx } from "./context";
+import { getPreferredOrganisationId } from "./active-organisation";
+import { type Ctx, MEMBERSHIP_LIMIT } from "./context";
 import { getFullName } from "./organisation";
 
 /**
@@ -12,8 +14,9 @@ import { getFullName } from "./organisation";
  * of homes for the Properties count. Two queries, with the user's own
  * client so RLS applies.
  *
- * The active organisation is the first membership, the same rule as
- * `getOrganisationId`, until the switcher arrives in roadmap item B5.
+ * The active organisation follows the same rule as `getMembership` in
+ * ./context.ts: the one picked in the switcher (roadmap B5) if the person
+ * is still an active member of it, otherwise the first one joined.
  */
 
 export type ShellOrganisation = {
@@ -38,18 +41,22 @@ export type Shell = {
 
 /** Null when the user has no organisation yet. */
 export async function getShell(ctx: Ctx): Promise<Shell | null> {
-  const { data, error } = await ctx.supabase
-    .from("memberships")
-    .select("organisation_id, role, organisations(id, name, account_type)")
-    .eq("user_id", ctx.userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: true })
-    .order("organisation_id", { ascending: true })
-    .limit(50);
+  const [memberships, preferred] = await Promise.all([
+    ctx.supabase
+      .from("memberships")
+      .select("organisation_id, role, organisations(id, name, account_type)")
+      .eq("user_id", ctx.userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .order("organisation_id", { ascending: true })
+      .limit(MEMBERSHIP_LIMIT),
+    getPreferredOrganisationId(),
+  ]);
+  const { data, error } = memberships;
   if (error) throw error;
 
-  const first = data[0];
-  if (!first) return null;
+  const current = pickActiveMembership(data, preferred);
+  if (!current) return null;
 
   const organisations = data.map((membership) => ({
     id: membership.organisation_id,
@@ -61,7 +68,7 @@ export async function getShell(ctx: Ctx): Promise<Shell | null> {
     ctx.supabase
       .from("properties")
       .select("id", { count: "exact", head: true })
-      .eq("organisation_id", first.organisation_id)
+      .eq("organisation_id", current.organisation_id)
       .is("archived_at", null),
     getFullName(ctx),
   ]);
@@ -70,9 +77,9 @@ export async function getShell(ctx: Ctx): Promise<Shell | null> {
   return {
     organisations,
     active: {
-      ...organisations[0]!,
-      role: roleLabel(first.role),
-      canAdd: hasRole(first.role, "manager"),
+      ...organisations[data.indexOf(current)]!,
+      role: roleLabel(current.role),
+      canAdd: hasRole(current.role, "manager"),
     },
     propertiesCount: count ?? 0,
     fullName,

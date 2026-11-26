@@ -4,6 +4,7 @@ import {
   ACCOUNT_TYPE_OPTIONS,
   ACCOUNT_TYPES,
   organisationSetupSchema,
+  switchOrganisationSchema,
 } from "./organisation";
 
 const valid = {
@@ -95,5 +96,30 @@ describe("organisationSetupSchema", () => {
     expect(ACCOUNT_TYPE_OPTIONS.map((option) => option.value)).toEqual([
       ...ACCOUNT_TYPES,
     ]);
+  });
+});
+
+describe("switchOrganisationSchema", () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+
+  it("accepts an organisation id", () => {
+    expect(switchOrganisationSchema.parse({ organisationId: id })).toEqual({
+      organisationId: id,
+    });
+  });
+
+  it("refuses anything that is not an id", () => {
+    for (const organisationId of ["", "first", 4, null, undefined]) {
+      expect(
+        switchOrganisationSchema.safeParse({ organisationId }).success,
+        String(organisationId),
+      ).toBe(false);
+    }
+  });
+
+  it("drops anything else sent with it, such as a role", () => {
+    expect(
+      switchOrganisationSchema.parse({ organisationId: id, role: "owner" }),
+    ).not.toHaveProperty("role");
   });
 });

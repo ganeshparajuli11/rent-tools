@@ -1,15 +1,19 @@
 import "server-only";
 
+import { ORGANISATION_SWITCHED_ACTION } from "@/lib/active-organisation";
 import {
   ALREADY_SET_UP,
   type OrganisationSetupValues,
 } from "@/lib/validation/organisation";
 
+import { setPreferredOrganisationId } from "./active-organisation";
 import {
   type Ctx,
+  getMembershipIn,
   getOrganisationId,
   NOT_FOUND,
   UserFacingError,
+  writeAudit,
 } from "./context";
 
 /**
@@ -144,4 +148,31 @@ export async function getOrganisationDetails(
   if (basic.error) throw basic.error;
   if (!basic.data) throw new UserFacingError(NOT_FOUND);
   return { name: basic.data.name, accountType: null, contactEmail: null };
+}
+
+const NOT_A_MEMBER =
+  "You are not a member of that organisation. Ask its owner to invite you.";
+
+/**
+ * Makes another of the person's organisations the active one (roadmap
+ * B5). The organisation id comes from the browser, so it is only used
+ * after checking, with the person's own client, that they are an active
+ * member of it; then it is remembered in an httpOnly cookie, which
+ * `getMembership` checks again on every request. Any role can switch.
+ */
+export async function switchOrganisation(
+  ctx: Ctx,
+  organisationId: string,
+): Promise<{ organisationId: string }> {
+  const membership = await getMembershipIn(ctx, organisationId);
+  if (!membership) throw new UserFacingError(NOT_A_MEMBER);
+
+  await setPreferredOrganisationId(organisationId);
+  await writeAudit(ctx, {
+    organisationId,
+    action: ORGANISATION_SWITCHED_ACTION,
+    table: "memberships",
+    recordId: membership.membershipId,
+  });
+  return { organisationId };
 }

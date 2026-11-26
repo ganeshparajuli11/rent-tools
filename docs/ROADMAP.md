@@ -77,7 +77,7 @@ migration is applied.
       single-use token and expiry; the email is Supabase Auth's invite or
       magic link, sent from server code; accepting adds the membership).
       Ownership transfer as a deliberate two-step confirm. → `next`.
-- [ ] **B5: Organisation switcher.** People in several organisations pick
+- [x] **B5: Organisation switcher.** _(on next)_ People in several organisations pick
       the active one (stored in a cookie, always re-checked against
       memberships on the server). Replace "first membership" in
       `getOrganisationId`.

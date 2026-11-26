@@ -2119,3 +2119,185 @@ Needs a human:
 After pushing: `main` run 71 (this log, commit `f13ea3d`) passed, and
 `next` was rebased onto it; pull request #10's run 72 (commit `93090fc`)
 passed every check.
+
+## 2026-11-26
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md` (organisations and roles),
+  `DESIGN_SYSTEM.md` (§2 app shell), `DECISIONS.md`,
+  `PENDING_MIGRATIONS.md`, README, AGENTS.md and the last days of this log.
+- Latest CI runs: `main` run 73 (commit `c982fc0`) and `next` run 74
+  (pull request #10) both passed. No open "Daily build blocked" issue; the
+  `auto/*` branches are from earlier days and already resolved. `next`
+  already sits on top of `main`, so no rebase was needed at the start.
+- No `add_repo` tool in this run; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, twelfth day:** `pnpm install --frozen-lockfile`
+  fails here (`registry.npmjs.org` does not resolve). So the Next.js guides
+  in `node_modules/next/dist/docs/` could not be read (today's code uses
+  only Next.js patterns already in the repository: `cookies()` from
+  `next/headers` in server code, server actions, `revalidatePath`), and
+  every Step 5 check runs in GitHub Actions on pull request #10.
+
+### Plan
+
+Today: **B5, Organisation switcher**, only. The item after it, C1, is
+marked large (L), and taking B5 plus a large item would be more than one
+large day's work, so C1 starts tomorrow. No decision blocks B5.
+
+- Scope: the active organisation is remembered in an httpOnly cookie
+  (`pd_active_org`, an organisation id only) and re-checked against the
+  person's **active** memberships on the server on every request;
+  `getMembership` (and so `getOrganisationId` and `requireRole`) and the
+  shell use it, falling back to the first organisation joined when the
+  cookie is missing, malformed or names an organisation they are not (or
+  no longer) in. The sidebar / More organisation block becomes a real
+  menu: picking another organisation calls a server action (Zod, runAction,
+  membership check, audit row), then goes to Today. Accepting an
+  invitation makes that organisation the active one. Signing out clears
+  the cookie.
+- Files: `src/lib/active-organisation.ts` (+ test),
+  `src/lib/validation/organisation.ts` (+ test), `src/server/context.ts`,
+  `src/server/active-organisation.ts`, `src/server/shell.ts`,
+  `src/server/organisation.ts`, `src/server/invitations.ts`,
+  `src/server/dashboard.ts` (keep switches out of Recent activity),
+  `src/server/run-action.ts`, `src/app/(app)/organisation-actions.ts`,
+  `src/app/(auth)/actions.ts`, `src/components/app/organisation-block.tsx`,
+  the guard test, `e2e/switcher.spec.ts` and its helpers, README.
+- Migration: none. But it builds on B3 and B4 (`memberships.status`,
+  invitations), which wait on `next`, so it goes to **`next`** (pull
+  request #10).
+- Tests: unit tests for picking the active membership and reading the
+  cookie value; schema tests; guard test entries (the switch checks the
+  person's own active membership of the organisation they pick and writes
+  `audit_log`); e2e at 375, 768 and 1440px for someone in two
+  organisations (switch, see the other organisation's homes and role,
+  still there after a reload, switch back).
+- Risks: a stale cookie after someone is removed (handled by the
+  fallback); a record page from the old organisation open while switching
+  (we go to Today); audit rows from switching crowding Today's Recent
+  activity (filtered out of that query).
+
+### Result
+
+| Task                      | Status                                             | Branch          |
+| ------------------------- | -------------------------------------------------- | --------------- |
+| B5: Organisation switcher | Done (no migration; waits on `next` for B3 and B4) | `next` (PR #10) |
+| C1 (L): Owners as records | Not started (large; next run)                      | none            |
+
+What B5 added:
+
+- **Server:** `src/server/active-organisation.ts` reads, sets and clears
+  the httpOnly cookie `pd_active_org` (organisation id only; `sameSite`
+  lax, secure in production, one year). `getMembership` in
+  `src/server/context.ts` (and so `getOrganisationId`, `requireRole` and
+  `hasRoleAtLeast`) and `getShell` now read the person's active
+  memberships (up to 50, still one query) and pick the cookie's
+  organisation only if it is one of them (`pickActiveMembership` in
+  `src/lib/active-organisation.ts`), otherwise the first one joined. New
+  `getMembershipIn(ctx, organisationId)` for the switch.
+  `organisation.switchOrganisation` refuses an organisation the person is
+  not an active member of ("You are not a member of that organisation"),
+  then sets the cookie and writes `audit_log` (`organisation.switched`,
+  record = the membership, no names). Today's Recent activity leaves those
+  rows out. Accepting an invitation sets the cookie to the organisation
+  just joined; signing out clears it. New rate-limit scope `switch`.
+- **Action:** `src/app/(app)/organisation-actions.ts`,
+  `switchOrganisationAction` (shared Zod schema
+  `switchOrganisationSchema`, `runAction`, `revalidatePath("/", "layout")`).
+- **Interface:** the organisation block (sidebar; More sheet on phones and
+  tablets) lists each organisation with its account type; picking another
+  shows "Now working in …" and goes to Today, where the shell, role and
+  every list are the new organisation's. "Switching … is coming soon" is
+  gone.
+- **Tests:** unit tests for the cookie value and the pick (including a
+  cookie for an organisation the person is not in); schema tests; the
+  guard test has a reviewed list for data functions that act on a named
+  organisation (must check `getMembershipIn` and refuse first, then write
+  `audit_log`), checks that `getMembership` and the shell pick from the
+  person's own active memberships, and that only the switcher and
+  `acceptInvitation` (after the database function) set the cookie (it
+  fails if the membership check is taken out; tried). `e2e/switcher.spec.ts`
+  at 375, 768 and 1440px: owner of one organisation and staff in another
+  switches, sees the other organisation's homes and no + New, reloads,
+  switches back (screenshots `test-results/screens/switcher-*.png`).
+- No RLS change: the database already limits every row to active
+  memberships; the cookie only chooses among them. No new table, so no new
+  isolation tests.
+
+Checks (GitHub Actions on pull request #10, run 75, commit `4ddcdfa`):
+
+| Check                              | Result                    |
+| ---------------------------------- | ------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)   |
+| `pnpm typecheck`                   | Passed (run 75)           |
+| `pnpm lint`                        | Passed (run 75)           |
+| `pnpm format:check`                | Passed (run 75)           |
+| `pnpm test`                        | Passed (run 75)           |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (run 75)           |
+| `pnpm audit --audit-level=high`    | Passed (run 75)           |
+| `pnpm test:rls`                    | Not run here, run locally |
+| `pnpm test:e2e`                    | Not run here, run locally |
+
+Local stand-ins before pushing: the new unit tests and the guard test ran
+under Node's type stripping with a small Vitest shim (all passed; the
+guard failed, as it should, with the membership check removed); the schema
+test needs Zod, so it ran only in CI. Prettier 3.8 (without the Tailwind
+plugin) on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; the only
+  hit is the existing skip message naming `SUPABASE_SERVICE_ROLE_KEY` in
+  the new e2e test). No new `NEXT_PUBLIC_` variable; no service-role client
+  in app code (the e2e helper's rename uses it for test set-up only).
+- The new server action validates with a shared Zod schema and goes
+  through `runAction` (session, rate limit, the person's own client); its
+  data function checks the person's own active membership of the
+  organisation before using it, and writes `audit_log`. Any role may
+  switch (it changes nothing in the organisation). The organisation id
+  from the browser is never trusted: the cookie is httpOnly, holds only an
+  id and is re-checked against memberships on every request; a forged or
+  stale cookie falls back to the person's first organisation and can
+  never reach one they are not in (RLS refuses it anyway).
+- No policy, auth check, rate limit or security header was weakened or
+  removed. No migration. No raw SQL from input, no
+  `dangerouslySetInnerHTML`; error text is fixed plain words.
+
+Pending migrations: none new. B2, B3 and B4 on `next` and the four from
+16 to 19 November are still waiting.
+
+Decisions made without asking:
+
+- Only B5 today: the next item (C1) is large, so it gets its own run.
+- B5 needs no migration but goes to `next`, because it builds on B3's
+  `memberships.status` and B4's invitations.
+- Switching writes an `audit_log` row (the rule for every action), but
+  Today's Recent activity hides it so it cannot push real activity out.
+- After switching we always go to Today: the page that was open belongs to
+  the old organisation and would show "not found".
+- Accepting an invitation makes the new organisation the active one.
+- On phones, the More sheet stays open after a switch (the page behind it
+  updates and the toast shows); closing it is one tap. Small; left for E1.
+- No new dependencies. No new decision row needed.
+
+Needs a human:
+
+- **Apply the migrations, then merge pull request #10 straight away.**
+  `pnpm db:push` applies the older four, then B2, B3 and B4 in order. B5
+  has no migration.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally** after applying. New:
+  `e2e/switcher.spec.ts`.
+- **Try by hand:** with an account in two organisations (invite it to a
+  second one), switch in the sidebar and in More on a phone; check the
+  homes, the role and the + New button change, and that a reload keeps
+  the choice.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (twelfth day).
+- From earlier days (unchanged): Supabase email limit / custom SMTP;
+  Supabase reset template and redirect URL; remove `ENABLE_TEST_LOGIN` from
+  Vercel; delete the merged `auto/*` and probe branches; legal check on
+  "remove personal details"; "Remove photo" hard-deletes; Resend and
+  `CRON_SECRET`; Dependabot pull requests (#1, #2, #3, #5, #6, #11).

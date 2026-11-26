@@ -2296,6 +2296,12 @@ Needs a human:
   the choice.
 - **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
   (twelfth day).
+- **Vercel previews of `next` still fail** (every push, as on earlier
+  days): the **Preview** environment in Vercel has no
+  `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, so
+  the build stops loading `next.config.ts`. Not a code problem (already
+  explained on pull request #10); add those variables to Preview, pointing
+  at the dev Supabase project.
 - From earlier days (unchanged): Supabase email limit / custom SMTP;
   Supabase reset template and redirect URL; remove `ENABLE_TEST_LOGIN` from
   Vercel; delete the merged `auto/*` and probe branches; legal check on

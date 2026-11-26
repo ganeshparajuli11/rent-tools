@@ -171,3 +171,12 @@ export async function addDemoHome(organisationId: string, name: string) {
   if (error || !data) throw new Error(`add home failed: ${error?.message}`);
   return data.id as string;
 }
+
+/** Test setup only (service role): gives an organisation another name. */
+export async function renameOrganisation(organisationId: string, name: string) {
+  const { error } = await admin()
+    .from("organisations")
+    .update({ name })
+    .eq("id", organisationId);
+  if (error) throw new Error(`rename organisation failed: ${error.message}`);
+}

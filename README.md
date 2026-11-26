@@ -379,6 +379,17 @@ Owners can download their data and remove a past tenant's personal details.
   their confirmed email), and `/invite/<token>` shows one; joining calls
   `public.accept_invitation`, which checks the email, adds the membership
   and writes `audit_log`. Nobody can insert a membership directly.
+- **Several organisations:** someone in more than one picks the active one
+  from the organisation block at the top of the sidebar (in **More** on
+  phones). The choice is kept in an httpOnly cookie (`pd_active_org`,
+  just an organisation id) and is only a wish: on every request
+  `getMembership` (`src/server/context.ts`) picks from the person's own
+  **active** memberships, and falls back to the first organisation they
+  joined when the cookie is missing or names one they are not (or no
+  longer) in. Switching (`switchOrganisationAction`) checks the
+  membership first and writes `audit_log` (left out of Today's Recent
+  activity). Joining by invitation makes that organisation the active one;
+  signing out forgets the choice.
 - Profiles: you see your own and those of people in your organisations,
   change only your own name, and never delete one (it goes with the user).
 - Money is stored as whole pence (`integer`), never as decimals.

@@ -168,6 +168,12 @@ const DATA_FUNCTION_ROLES: Record<string, Role> = {
   "photos.preparePhotoUpload": "manager",
   "photos.addPhoto": "manager",
   "photos.removePhoto": "manager",
+  // Owner records and their links to homes: managers and above.
+  "owners.createOwner": "manager",
+  "owners.updateOwner": "manager",
+  "owners.setOwnerArchived": "manager",
+  "owners.linkOwner": "manager",
+  "owners.unlinkOwner": "manager",
   // Tenants: managers and above. Removing a past tenant's details cannot
   // be undone: owners only.
   "tenants.createTenant": "manager",
@@ -213,6 +219,7 @@ describe("server actions", () => {
         "app/(app)/homes/actions.ts",
         "app/(app)/homes/photo-actions.ts",
         "app/(app)/organisation-actions.ts",
+        "app/(app)/owners/actions.ts",
         "app/(app)/rent/actions.ts",
         "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
@@ -404,6 +411,32 @@ describe("server actions", () => {
     expect(invite).toMatch(/token_hash: await hashInvitationToken\(token\)/);
     // A tighter limit than ordinary changes, because each one sends email.
     expect(invite).toMatch(/rateLimit\("invite-email"/);
+  });
+
+  it("owner audit rows never hold names or contact details", () => {
+    const owners = byPath.get("server/owners.ts")!.text;
+    const homes = byPath.get("server/homes.ts")!.text;
+    const blocks = (text: string) =>
+      [...text.matchAll(/writeAudit\(ctx, \{[\s\S]*?\n\s*\}\);/g)].map(
+        (match) => match[0],
+      );
+    const ownerBlocks = blocks(owners);
+    expect(ownerBlocks.length).toBeGreaterThanOrEqual(6);
+    for (const block of ownerBlocks) {
+      const allowed = block
+        .replace("filledFields(values)", "")
+        .replace("values.ownerType", "");
+      expect(allowed).not.toMatch(
+        /values|full_?name|company_?name|email|phone|notes|nameOf/i,
+      );
+    }
+    // Rent paid to an owner is logged without the owner's name or phone.
+    for (const block of blocks(homes).filter((b) =>
+      /"home\.(created|updated)"/.test(b),
+    )) {
+      expect(block).toMatch(/owner: leaseFacts\(/);
+      expect(block).not.toMatch(/owner: (before|values)\.owner\b/);
+    }
   });
 
   it("the sign-in actions are the known ones, rate limited and validated", () => {

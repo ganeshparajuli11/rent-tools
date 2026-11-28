@@ -27,6 +27,7 @@ const TOO_MANY =
 /** Areas of the app, each with its own rate limit. */
 export const ACTION_SCOPES = [
   "homes",
+  "owners",
   "tenants",
   "rent",
   "settings",

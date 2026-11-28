@@ -95,6 +95,45 @@ export function TextField<T extends FieldValues>({
   );
 }
 
+/** Several lines of text, such as notes. */
+export function TextAreaField<T extends FieldValues>({
+  form,
+  name,
+  label,
+  hint,
+  className,
+  rows = 4,
+  ...textareaProps
+}: BaseProps<T> &
+  Omit<React.ComponentProps<"textarea">, "name" | "form" | "id">) {
+  const id = `field-${name}`;
+  const error = errorOf(form, name);
+  return (
+    <Field data-invalid={error ? true : undefined} className={className}>
+      <FieldLabel htmlFor={id} className="text-base">
+        {label}
+      </FieldLabel>
+      {hint ? (
+        <FieldDescription id={`${id}-hint`} className="text-base">
+          {hint}
+        </FieldDescription>
+      ) : null}
+      <textarea
+        id={id}
+        rows={rows}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, hint, error)}
+        className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
+        {...textareaProps}
+        {...form.register(name)}
+      />
+      <FieldError id={`${id}-error`} className="text-base">
+        {error}
+      </FieldError>
+    </Field>
+  );
+}
+
 /** Large radio "cards". Native radios, so arrow keys and Space work. */
 export function ChoiceField<T extends FieldValues>({
   form,

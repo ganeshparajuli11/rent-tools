@@ -57,7 +57,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         ready: true,
         bottomBar: true,
       },
-      { href: "/owners", label: "Owners", icon: "owners", ready: false },
+      { href: "/owners", label: "Owners", icon: "owners", ready: true },
       { href: "/tenants", label: "Tenants", icon: "tenants", ready: false },
       {
         href: "/tenancies",

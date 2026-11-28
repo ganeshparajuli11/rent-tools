@@ -20,7 +20,7 @@ describe("visibleNavGroups", () => {
     ]);
     expect(
       groups.flatMap((group) => group.items.map((item) => item.label)),
-    ).toEqual(["Today", "Properties", "Rent", "Settings"]);
+    ).toEqual(["Today", "Properties", "Owners", "Rent", "Settings"]);
   });
 
   it("keeps the design system's order of groups", () => {
@@ -57,7 +57,7 @@ describe("bottom bar and More", () => {
 
   it("puts the rest under More, with no item in both", () => {
     const more = moreItems().map((item) => item.label);
-    expect(more).toEqual(["Settings"]);
+    expect(more).toEqual(["Owners", "Settings"]);
     for (const item of bottomBarItems()) {
       expect(more).not.toContain(item.label);
     }

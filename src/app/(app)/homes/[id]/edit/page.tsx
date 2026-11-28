@@ -48,6 +48,11 @@ export default async function EditHomePage({
         <HomeEditForm
           homeId={home.id}
           activeRoomCount={home.rooms.length}
+          linkedOwner={
+            home.owner?.ownerId
+              ? { id: home.owner.ownerId, name: home.owner.name }
+              : null
+          }
           defaultValues={{
             name: home.name,
             addressLine1: home.addressLine1,

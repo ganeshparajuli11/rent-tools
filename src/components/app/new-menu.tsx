@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2Icon, PlusIcon } from "lucide-react";
+import { Building2Icon, PlusIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -13,10 +13,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Things you can add from anywhere. Only items that work today are listed;
- * Tenant, Owner, Payment, Repair and Contractor join as their pages arrive.
+ * Tenant, Payment, Repair and Contractor join as their pages arrive.
  */
 const NEW_ITEMS = [
   { href: "/homes/new", label: "Property", icon: Building2Icon },
+  { href: "/owners/new", label: "Owner", icon: UserIcon },
 ] as const;
 
 export function NewMenu({ className }: { className?: string }) {

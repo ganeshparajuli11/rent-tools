@@ -22,10 +22,13 @@ export function HomeEditForm({
   homeId,
   defaultValues,
   activeRoomCount,
+  linkedOwner = null,
 }: {
   homeId: string;
   defaultValues: CreateHomeInput;
   activeRoomCount: number;
+  /** The owner record the rent is paid to, if any. */
+  linkedOwner?: { id: string; name: string } | null;
 }) {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
@@ -77,7 +80,7 @@ export function HomeEditForm({
         <h2 id="edit-owner" className="text-xl font-semibold">
           Owner
         </h2>
-        <OwnerFields form={form} />
+        <OwnerFields form={form} linkedOwner={linkedOwner} />
       </section>
 
       {formError ? (

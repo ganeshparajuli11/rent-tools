@@ -2541,3 +2541,7 @@ Needs a human:
   Vercel; delete the merged `auto/*` and probe branches; legal check on
   "remove personal details"; "Remove photo" hard-deletes; Resend and
   `CRON_SECRET`; Dependabot pull requests.
+
+After pushing: `main` run 84 (this log, commit `017d441`) passed, and
+`next` was rebased onto it; pull request #10's run 85 (commit `834d267`)
+passed every check.

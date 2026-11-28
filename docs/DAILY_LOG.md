@@ -2311,3 +2311,82 @@ Needs a human:
 After pushing: `main` run 76 (this log, commit `32a5895`) passed, and
 `next` was rebased onto it; pull request #10's run 77 (commit `9c61d4a`)
 passed every check.
+
+## 2026-11-28
+
+### Start of run
+
+- Docs read: `ROADMAP.md`, `PRODUCT_SPEC.md` (owners, §5 roles, §7 data
+  model), `DESIGN_SYSTEM.md` (list and record templates), `DECISIONS.md`
+  (D-2, D-7), `PENDING_MIGRATIONS.md`, README, AGENTS.md and the last days
+  of this log.
+- Latest CI runs: `main` run 80 (commit `784e6ee`) and `next` run 81
+  (pull request #10, commit `b7fff69`) both passed. No open "Daily build
+  blocked" issue; the `auto/*` branches are from earlier days and already
+  resolved. `next` already sits on top of `main`, so no rebase was needed
+  at the start. No run on 27/11.
+- No `add_repo` tool in this run; the repository was already cloned in the
+  session with push access, so that was used.
+- **Environment problem, thirteenth day:** `pnpm install --frozen-lockfile`
+  fails here (`registry.npmjs.org` does not resolve directly and the proxy
+  refuses it with 403). So the Next.js guides in
+  `node_modules/next/dist/docs/` could not be read (today's code uses only
+  Next.js patterns already in the repository: server components,
+  `PageProps`, server actions, `revalidatePath`, `notFound`), and every
+  Step 5 check runs in GitHub Actions on pull request #10.
+
+### Plan
+
+Today: **C1 (L), Owners as records**, only (a large item is a day's work
+on its own). No decision blocks it; it follows D-2 (several owners per
+home through `property_owner_links`, no percentages) and D-7 (owners are
+organisation-wide records).
+
+- Scope:
+  - Migration `20261128030000_property_owners.sql`: `property_owners`
+    (person or company, name, company name, email, phone, address,
+    notes, archived) with a generated `display_name` for sorting;
+    `property_owner_links` (home ↔ owner); `owner_leases.owner_id`. RLS
+    in the same file: everyone in the organisation reads; managers and
+    above add, change and link; only owners delete owner records (the app
+    archives instead). Composite foreign keys so a link or a lease can
+    never point at another organisation's owner. Copies the owner names
+    typed on existing owner leases into owner records (one per name +
+    email + phone in each organisation), sets `owner_leases.owner_id`,
+    and links each current lease's owner to its home. Old columns stay.
+  - Server: `src/server/owners.ts` (list, record, picker options, create,
+    update, archive and restore, link and unlink), each write with
+    `requireRole(ctx, "manager")` and an `audit_log` row with no names or
+    contact details. `homes.ts`: the home page reads its linked owners;
+    "Add a home" and "Edit home" make the owner record and link when they
+    add rent paid to an owner, and only change the rent and due day of a
+    lease that already belongs to an owner record.
+  - Pages: `/owners` (list template: Current / Archived, table on desktop,
+    cards on phones, pagination, empty state), `/owners/new`,
+    `/owners/[id]` (record template: header, stat cards, linked homes,
+    rent you pay them, contact, notes, archive with Undo),
+    `/owners/[id]/edit`. Home page: an **Owners** card to link an existing
+    owner, add a new one (comes back linked) or unlink (with Undo). Owners
+    turns on in the menu and in **+ New**.
+- Files: new migration; `src/lib/supabase/database.types.ts`;
+  `src/lib/validation/owners.ts` (+ test); `src/lib/owners.ts` (+ test);
+  `src/server/owners.ts`; `src/server/homes.ts`;
+  `src/app/(app)/owners/**`; `src/components/owners/**`;
+  `src/components/homes/home-fields.tsx`, `home-edit-form.tsx`;
+  `src/app/(app)/homes/[id]/page.tsx` and `edit/page.tsx`;
+  `src/components/form-fields.tsx` (a text area field); `src/lib/nav.ts`
+  (+ test), `src/components/app/new-menu.tsx`; `src/server/run-action.ts`
+  (an `owners` rate-limit scope); the guard test; `tests/rls/owners.test.ts`;
+  `e2e/owners.spec.ts`; README.
+- Migration: yes, so it goes to **`next`** (pull request #10), after B2–B5.
+- Tests: schema and helper unit tests; guard test entries for every new
+  data function (role `manager`, audit row); RLS tests for two
+  organisations and every role (read, add, change, link, unlink, delete;
+  no cross-organisation links); e2e at 375, 768 and 1440px (add an owner,
+  link it to a home, see it on both pages, unlink with Undo, archive).
+- Risks: the copy merges owners only when name, email and phone all match,
+  so the same person typed two ways becomes two records (safer than
+  merging two different people; they can be tidied by hand). Typed
+  embedded selects on the new tables depend on the hand-written types
+  matching the migration exactly; CI's typecheck is the only check of
+  that today.

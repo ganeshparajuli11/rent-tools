@@ -84,7 +84,7 @@ migration is applied.
 
 ## Phase C: core CRM records
 
-- [ ] **C1 (L): Owners as records.** Migration: `property_owners`
+- [x] **C1 (L): Owners as records.** _(on next)_ Migration: `property_owners`
       (individual / company, name, company name, email, phone, address,
       notes, archived) and `property_owner_links` (D-2); copy existing owner
       names from `owner_leases` into owner records and link them;

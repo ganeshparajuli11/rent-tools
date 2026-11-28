@@ -2390,3 +2390,154 @@ organisation-wide records).
   embedded selects on the new tables depend on the hand-written types
   matching the migration exactly; CI's typecheck is the only check of
   that today.
+
+### Result
+
+| Task                       | Status                             | Branch          |
+| -------------------------- | ---------------------------------- | --------------- |
+| C1 (L): Owners as records  | Done (needs its migration applied) | `next` (PR #10) |
+| C2 (L): Tenants as records | Not started (large; next run)      | none            |
+
+What C1 added:
+
+- **Migration** `20261128030000_property_owners.sql`: `property_owners`
+  (person or company; full name, company name, email, phone, address,
+  notes, `archived_at`, and a generated `display_name` for sorting),
+  `property_owner_links` (home ↔ owner, unique per pair, `created_by`)
+  and `owner_leases.owner_id`. Composite foreign keys keep links and
+  leases inside one organisation. RLS in the same file: members read;
+  managers and above add, change, link and unlink; only owners delete an
+  owner record (the app archives). The copy step makes one owner record
+  per name + email + phone in each organisation from the owners typed on
+  existing leases, fills `owner_leases.owner_id`, and links each current
+  lease's owner to its home. Old lease columns stay.
+- **Server:** `src/server/owners.ts`: `listOwners` (one query, with the
+  homes count and the rent paid to each owner), `getOwner`,
+  `listOwnerOptions`, and the writes `createOwner` (optionally linked to
+  a home), `updateOwner`, `setOwnerArchived`, `linkOwner`, `unlinkOwner`,
+  each with `requireRole(ctx, "manager")` and an `audit_log` row that
+  holds record ids, the owner type and the names of changed fields, never
+  a name or contact detail. `homes.ts`: the home page reads its linked
+  owners; rent typed on **Add a home** / **Edit home** now makes the owner
+  record and link (or reuses a linked owner with the same name); a lease
+  that already belongs to an owner record only changes its rent and due
+  day there. The home audit rows no longer copy the owner's name or phone
+  (they did before). New rate-limit scope `owners`.
+- **Pages:** `/owners` (Current / Archived, table on desktop, cards on
+  phones, pagination, empty state), `/owners/new` (from a home it links
+  the new owner and goes back), `/owners/[id]` (header with initials and
+  chips, stat cards, homes, rent you pay them with DD/MM/YYYY dates,
+  contact, notes, archive with Undo), `/owners/[id]/edit`, plus loading,
+  error and not-found pages. Home page: an **Owners** card (link an owner,
+  add a new one, unlink with Undo) and a **Rent to the owner** card. Owners
+  is in the sidebar, the More sheet and **+ New**. New shared
+  `TextAreaField`.
+- **Tests:** unit tests for the owner schema and helpers; guard entries
+  for the five new data functions and a new guard that owner audit rows
+  never hold names or contact details; `tests/rls/owners.test.ts` (two
+  organisations, every role: read, add, change, delete, link, unlink, no
+  cross-organisation links, archived owners cannot be linked, audit rows
+  without names); `e2e/owners.spec.ts` at 375, 768 and 1440px with
+  screenshots (`test-results/screens/owner*-*.png`).
+
+Checks (GitHub Actions on pull request #10, run 83, commit `64bd55a`):
+
+| Check                              | Result                                                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`   | Passed (GitHub Actions)                                                                                   |
+| `pnpm typecheck`                   | Passed (run 83)                                                                                           |
+| `pnpm lint`                        | Passed (run 83; one warning: React Compiler skips the owner form because of `watch`, as on the home form) |
+| `pnpm format:check`                | Passed (run 83)                                                                                           |
+| `pnpm test`                        | Passed (run 83)                                                                                           |
+| `SKIP_ENV_VALIDATION=1 pnpm build` | Passed (run 83)                                                                                           |
+| `pnpm audit --audit-level=high`    | Passed (run 83)                                                                                           |
+| `pnpm test:rls`                    | Not run here, run locally                                                                                 |
+| `pnpm test:e2e`                    | Not run here, run locally                                                                                 |
+
+Run 82 (commit `d650963`) failed `format:check` only: the Prettier 3.8
+copy here had reformatted the helper types at the end of
+`database.types.ts`; that part was put back as it was, and run 83 passed.
+
+Local stand-ins before pushing:
+
+- **The migration was applied for real** to a local PostgreSQL 16 with a
+  small stand-in for Supabase's `auth` and `storage` schemas: every
+  migration in order on an empty database (clean), and again with sample
+  rows so the copy step ran (two leases with the same name and phone typed
+  differently became one owner; a lease with no phone became another; the
+  other organisation's owner stayed separate; current leases were linked).
+  Row-level security was then tried as each role with `set role
+authenticated`: staff could read but not add, change or unlink;
+  a manager could add and link but not delete; another organisation saw
+  and changed nothing; signed-out had no access; the owner could delete.
+- Unit tests and the guard test ran under `tsx` with Zod 4 and a small
+  Vitest stand-in (all passed; the guard caught a comment that mentioned
+  "values" in an audit block, since reworded).
+- Tailwind class order was checked with Tailwind 4.3.3's own class
+  sorting (the same engine the Prettier plugin uses), and Prettier 3.8 ran
+  on every changed file.
+
+Security review of today's diff:
+
+- No secrets, keys, tokens or `.env` files (searched for `sb_secret_`,
+  `service_role`, JWT-shaped strings, API keys and private keys; the hits
+  are the migration's `grant ... to service_role` and the env variable
+  names in the new RLS test's skip message). No new `NEXT_PUBLIC_`
+  variable; no service-role client in app code (the RLS and e2e tests use
+  it for test set-up only).
+- Every new server action validates with a shared Zod schema and goes
+  through `runAction` (session, rate limit, the person's own client); each
+  data function derives the organisation on the server, starts with
+  `requireRole(ctx, "manager")`, filters by organisation and writes
+  `audit_log` without names or contact details. Ids from the browser are
+  only used inside the organisation found on the server, and the composite
+  foreign keys refuse a link to another organisation's home or owner.
+- The new migration enables RLS on both new tables with explicit
+  per-role policies and resets the grants (anon gets nothing; links cannot
+  be updated). No existing policy, auth check, rate limit or security
+  header was weakened or removed. No raw SQL from input, no
+  `dangerouslySetInnerHTML`; error messages are fixed plain words.
+
+Pending migrations: **new** `20261128030000_property_owners.sql` on
+`next` (added to `PENDING_MIGRATIONS.md`). B2, B3 and B4 on `next` and the
+four from 16 to 19 November are still waiting.
+
+Decisions made without asking:
+
+- Only C1 today (large item).
+- The copy merges owners only when name, email and phone all match
+  (ignoring case and spaces), so two different people are never merged;
+  the same person typed two ways becomes two records.
+- Only current leases create links; an ended lease keeps its owner but
+  does not link them to the home.
+- A company needs its company name; the contact name is optional. A person
+  needs their full name. Email, phone, address and notes are optional
+  (collect only what is needed); the notes hint says no bank details.
+- Unlinking removes the link row (Undo links again; `audit_log` keeps the
+  history). New question **D-20** in `DECISIONS.md`, with this as the
+  provisional answer, also covering owners in the data download (not yet).
+- The home form keeps "rent you pay the owner"; for a lease that belongs
+  to an owner record it shows the owner instead of name and phone boxes,
+  with a link to edit the owner.
+- No new dependencies.
+
+Needs a human:
+
+- **Apply the migrations, then merge pull request #10 straight away.**
+  `pnpm db:push` applies the older four, then B2, B3, B4 and C1 in order.
+- **Run `pnpm test:rls` and `pnpm test:e2e` locally** after applying. New:
+  `tests/rls/owners.test.ts`, `e2e/owners.spec.ts`.
+- **Try by hand:** on a home you rent from an owner, check the owner
+  record was made and linked; add an owner from **Owners**, link and
+  unlink them on a home (Undo), add a company from a home, archive and
+  bring back an owner; as staff, check you can look but not change.
+- **Allow the daily run's cloud environment to reach `registry.npmjs.org`**
+  (thirteenth day).
+- **Vercel previews of `next` still fail**: add
+  `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to
+  the **Preview** environment in Vercel (dev Supabase project).
+- From earlier days (unchanged): Supabase email limit / custom SMTP;
+  Supabase reset template and redirect URL; remove `ENABLE_TEST_LOGIN` from
+  Vercel; delete the merged `auto/*` and probe branches; legal check on
+  "remove personal details"; "Remove photo" hard-deletes; Resend and
+  `CRON_SECRET`; Dependabot pull requests.

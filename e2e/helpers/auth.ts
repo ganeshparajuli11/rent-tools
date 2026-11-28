@@ -180,3 +180,17 @@ export async function renameOrganisation(organisationId: string, name: string) {
     .eq("id", organisationId);
   if (error) throw new Error(`rename organisation failed: ${error.message}`);
 }
+
+/** Test setup only (service role): the organisation a person owns. */
+export async function ownedOrganisationId(userId: string) {
+  const { data, error } = await admin()
+    .from("memberships")
+    .select("organisation_id")
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .single();
+  if (error || !data) {
+    throw new Error(`find organisation failed: ${error?.message}`);
+  }
+  return data.organisation_id as string;
+}

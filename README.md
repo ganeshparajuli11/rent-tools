@@ -192,6 +192,27 @@ GitHub Actions.
 - Every focusable element gets the same strong focus ring (`globals.css`), and
   the first Tab stop is a "Skip to main content" link.
 
+## Owners
+
+- **Owners** (`/owners`) are the people and companies who own the homes
+  you let or manage: a record each (`property_owners`: person or company,
+  name, company name, optional email, phone, address and notes), shared
+  across the organisation. They are a separate thing from your
+  organisation, even if you are a landlord who owns your homes.
+- A home can have several owners and an owner several homes
+  (`property_owner_links`). Link an owner from the home's **Owners** card,
+  add a new one from there (they come back linked), or unlink one (with
+  Undo; their record is kept).
+- Rent you pay an owner (rent-to-rent) stays on the home: **Edit home** ›
+  "Do you rent this home from an owner?". Adding it there also makes the
+  owner record and links it (`owner_leases.owner_id`). Once it belongs to
+  an owner record, their name and phone are changed on the owner's page.
+  The owner's page lists their homes and the rent you pay them.
+- Owners are archived (with Undo), never deleted by the app. Managers and
+  above add, change, link and archive owners; staff can look.
+- The audit log records what happened to an owner, never their name or
+  contact details.
+
 ## Tenants
 
 - A tenant is added from a room (or from a home let as a whole) in three
@@ -340,8 +361,9 @@ Owners can download their data and remove a past tenant's personal details.
 - **Roles** (`memberships.role`, highest first): **owner**, **admin**,
   **manager**, **staff**. Only **active** memberships (`memberships.status`:
   active, invited or removed) give any access. Everyone in an organisation
-  reads its rows. Managers and above add and change homes, rooms, owners'
-  rent, tenants and rent charges; every role records rent payments. Only
+  reads its rows. Managers and above add and change homes, rooms, owners
+  (and their links to homes), owners' rent, tenants and rent charges; every
+  role records rent payments. Only
   owners change settings, download data, remove a tenant's details or
   delete rows. Owners change or remove any member; admins any member who is
   not an owner, and never make anyone an owner. The rules are in RLS (helper

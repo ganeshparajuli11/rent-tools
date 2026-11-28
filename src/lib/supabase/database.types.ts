@@ -184,6 +184,7 @@ export type Database = {
           id: string;
           organisation_id: string;
           owner_email: string | null;
+          owner_id: string | null;
           owner_name: string;
           owner_phone: string | null;
           property_id: string;
@@ -198,6 +199,7 @@ export type Database = {
           id?: string;
           organisation_id: string;
           owner_email?: string | null;
+          owner_id?: string | null;
           owner_name: string;
           owner_phone?: string | null;
           property_id: string;
@@ -212,6 +214,7 @@ export type Database = {
           id?: string;
           organisation_id?: string;
           owner_email?: string | null;
+          owner_id?: string | null;
           owner_name?: string;
           owner_phone?: string | null;
           property_id?: string;
@@ -226,6 +229,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organisations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "owner_leases_owner_id_organisation_id_fkey";
+            columns: ["owner_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "property_owners";
+            referencedColumns: ["id", "organisation_id"];
           },
           {
             foreignKeyName: "owner_leases_property_id_organisation_id_fkey";
@@ -360,6 +370,120 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "properties_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      property_owner_links: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          organisation_id: string;
+          owner_id: string;
+          property_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id: string;
+          owner_id: string;
+          property_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id?: string;
+          owner_id?: string;
+          property_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_owner_links_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "property_owner_links_owner_id_organisation_id_fkey";
+            columns: ["owner_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "property_owners";
+            referencedColumns: ["id", "organisation_id"];
+          },
+          {
+            foreignKeyName: "property_owner_links_property_id_organisation_id_fkey";
+            columns: ["property_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "properties";
+            referencedColumns: ["id", "organisation_id"];
+          },
+        ];
+      };
+      property_owners: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          archived_at: string | null;
+          city: string | null;
+          company_name: string | null;
+          created_at: string;
+          display_name: string | null;
+          email: string | null;
+          full_name: string | null;
+          id: string;
+          notes: string | null;
+          organisation_id: string;
+          owner_type: string;
+          phone: string | null;
+          postcode: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          archived_at?: string | null;
+          city?: string | null;
+          company_name?: string | null;
+          created_at?: string;
+          display_name?: never;
+          email?: string | null;
+          full_name?: string | null;
+          id?: string;
+          notes?: string | null;
+          organisation_id: string;
+          owner_type?: string;
+          phone?: string | null;
+          postcode?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          archived_at?: string | null;
+          city?: string | null;
+          company_name?: string | null;
+          created_at?: string;
+          display_name?: never;
+          email?: string | null;
+          full_name?: string | null;
+          id?: string;
+          notes?: string | null;
+          organisation_id?: string;
+          owner_type?: string;
+          phone?: string | null;
+          postcode?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_owners_organisation_id_fkey";
             columns: ["organisation_id"];
             isOneToOne: false;
             referencedRelation: "organisations";
@@ -643,12 +767,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -670,12 +794,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -694,12 +819,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -718,12 +844,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -736,11 +863,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

@@ -26,6 +26,7 @@ import {
 } from "@/components/homes/home-archive-buttons";
 import { HomePhotos } from "@/components/homes/home-photos";
 import { RoomList } from "@/components/homes/room-list";
+import { HomeOwners } from "@/components/owners/home-owners";
 import { formatDate, ordinal } from "@/lib/dates";
 import { homeStatus } from "@/lib/home-status";
 import { formatPence } from "@/lib/money";
@@ -33,7 +34,9 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { getHome } from "@/server/homes";
+import { listOwnerOptions } from "@/server/owners";
 import { listHomePhotos } from "@/server/photos";
 
 export const metadata: Metadata = { title: "Home" };
@@ -58,9 +61,12 @@ export default async function HomeDetailPage({
 
   const supabase = await createClient();
   const ctx = { supabase, userId: user.id };
-  const [home, photos] = await Promise.all([
+  const [home, photos, canManage, ownerOptions] = await Promise.all([
     getHome(ctx, id),
     listHomePhotos(ctx, id),
+    // Staff can look but not change (docs/DESIGN_SYSTEM.md §8).
+    hasRoleAtLeast(ctx, "manager"),
+    listOwnerOptions(ctx),
   ]);
   if (!home) notFound();
 
@@ -132,13 +138,15 @@ export default async function HomeDetailPage({
           ) : null
         }
         actions={
-          <Link
-            href={`/homes/${home.id}/edit`}
-            className={cn(secondaryActionClass, "w-full sm:w-auto")}
-          >
-            <PencilIcon aria-hidden="true" className="size-4.5" />
-            Edit home
-          </Link>
+          canManage ? (
+            <Link
+              href={`/homes/${home.id}/edit`}
+              className={cn(secondaryActionClass, "w-full sm:w-auto")}
+            >
+              <PencilIcon aria-hidden="true" className="size-4.5" />
+              Edit home
+            </Link>
+          ) : null
         }
       />
 
@@ -150,7 +158,7 @@ export default async function HomeDetailPage({
           <p className="text-base font-medium">
             This home is archived. It is hidden from your list.
           </p>
-          <RestoreHomeButton homeId={home.id} />
+          {canManage ? <RestoreHomeButton homeId={home.id} /> : null}
         </div>
       ) : null}
 
@@ -177,7 +185,7 @@ export default async function HomeDetailPage({
             homeId={home.id}
             homeName={home.name}
             photos={photos}
-            readOnly={home.archived}
+            readOnly={home.archived || !canManage}
           />
         </div>
       ) : (
@@ -214,7 +222,7 @@ export default async function HomeDetailPage({
                   letType={home.letType}
                   rooms={home.rooms}
                   archivedRooms={home.archivedRooms}
-                  readOnly={home.archived}
+                  readOnly={home.archived || !canManage}
                 />
               </div>
 
@@ -242,7 +250,7 @@ export default async function HomeDetailPage({
                       <p className="text-base text-muted-foreground">
                         Empty. This home has no tenant.
                       </p>
-                      {!home.archived ? (
+                      {!home.archived && canManage ? (
                         <Link
                           href={`/homes/${home.id}/tenants/new`}
                           className={cn(primaryActionClass, "sm:self-start")}
@@ -293,14 +301,36 @@ export default async function HomeDetailPage({
             </div>
 
             <aside className="flex flex-col gap-6">
-              <SectionCard id="owner" title="Owner">
+              <SectionCard id="owners" title="Owners">
+                <HomeOwners
+                  homeId={home.id}
+                  owners={home.owners}
+                  options={ownerOptions}
+                  canManage={!home.archived && canManage}
+                />
+              </SectionCard>
+
+              <SectionCard id="owner-rent" title="Rent to the owner">
                 {home.owner ? (
-                  <div className="flex flex-col gap-4 text-base">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={home.owner.name} />
-                      <span className="font-semibold break-words">
-                        {home.owner.name}
-                      </span>
+                  <div className="flex flex-col gap-3 text-base">
+                    <div className="rounded-xl bg-subtle p-3">
+                      <p className="text-[13px] text-muted-foreground">
+                        Rent you pay{" "}
+                        {home.owner.ownerId ? (
+                          <Link
+                            href={`/owners/${home.owner.ownerId}`}
+                            className="underline underline-offset-4"
+                          >
+                            {home.owner.name}
+                          </Link>
+                        ) : (
+                          home.owner.name
+                        )}
+                      </p>
+                      <p className="font-medium">
+                        {formatPence(home.owner.rentPence)} a month, due on the{" "}
+                        {ordinal(home.owner.dueDay)}
+                      </p>
                     </div>
                     {home.owner.phone ? (
                       <a
@@ -311,24 +341,18 @@ export default async function HomeDetailPage({
                         {home.owner.phone}
                       </a>
                     ) : null}
-                    <div className="rounded-xl bg-subtle p-3">
-                      <p className="text-[13px] text-muted-foreground">
-                        Rent you pay the owner
-                      </p>
-                      <p className="font-medium">
-                        {formatPence(home.owner.rentPence)} a month, due on the{" "}
-                        {ordinal(home.owner.dueDay)}
-                      </p>
-                    </div>
                   </div>
                 ) : (
                   <p className="text-base text-muted-foreground">
-                    You do not rent this home from an owner.
+                    You do not pay rent to an owner for this home.
+                    {canManage && !home.archived
+                      ? " If you rent it from them, add it on the Edit home page."
+                      : null}
                   </p>
                 )}
               </SectionCard>
 
-              {!home.archived ? (
+              {!home.archived && canManage ? (
                 <section className="flex flex-col gap-2 rounded-[20px] border border-dashed border-border p-4 sm:p-6">
                   <p className="text-base text-muted-foreground">
                     Not letting this home any more? Archive it to hide it from

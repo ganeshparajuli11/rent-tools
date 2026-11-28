@@ -18,7 +18,7 @@
 //
 // Sign in on the normal sign-in page with that email and password (real
 // email and password sign-in, roadmap B1). Fictional data only.
-// Needs the property photos migration.
+// Needs the property photos and organisation set-up migrations.
 
 import { randomUUID } from "node:crypto";
 
@@ -383,14 +383,18 @@ async function deleteDemoAccount(user) {
 async function main() {
   console.log(`Supabase project: ${url}`);
 
-  // The photos table must exist (supabase/migrations/*_property_photos.sql).
-  const photosTable = await db
-    .from("property_photos")
-    .select("id", { count: "exact", head: true });
-  if (photosTable.error) {
-    throw new Error(
-      "The property_photos table is missing. Apply the migrations first: pnpm db:push",
-    );
+  // The photos and profiles tables must exist
+  // (supabase/migrations/*_property_photos.sql and
+  // *_organisation_setup_and_profiles.sql).
+  for (const table of ["property_photos", "profiles"]) {
+    const found = await db
+      .from(table)
+      .select("id", { count: "exact", head: true });
+    if (found.error) {
+      throw new Error(
+        `The ${table} table is missing. Apply the migrations first: pnpm db:push`,
+      );
+    }
   }
 
   const existing = await findUserByEmail(EMAIL);
@@ -404,23 +408,44 @@ async function main() {
     email: EMAIL,
     password: PASSWORD,
     email_confirm: true,
-    user_metadata: { organisation_name: "Demo Lettings" },
+    user_metadata: { full_name: "Taylor Example" },
   });
   if (createError || !created.user) {
     throw new Error(`creating the demo user failed: ${createError?.message}`);
   }
   const userId = created.user.id;
 
-  // The sign-up trigger made the organisation and the owner membership.
-  const membership = check(
+  // The sign-up trigger made the profile. Set up the organisation as the
+  // /setup screen would: the demo user is its owner.
+  check(
+    await db
+      .from("profiles")
+      .upsert({ id: userId, full_name: "Taylor Example" })
+      .select("id")
+      .single(),
+    "saving the demo profile",
+  );
+  const organisation = check(
+    await db
+      .from("organisations")
+      .insert({
+        name: "Demo Lettings",
+        account_type: "property_manager",
+        contact_email: EMAIL,
+      })
+      .select("id")
+      .single(),
+    "creating the demo organisation",
+  );
+  const org = organisation.id;
+  check(
     await db
       .from("memberships")
-      .select("organisation_id")
-      .eq("user_id", userId)
+      .insert({ user_id: userId, organisation_id: org, role: "owner" })
+      .select("id")
       .single(),
-    "reading the new organisation",
+    "making the demo user its owner",
   );
-  const org = membership.organisation_id;
 
   const counts = {
     homes: 0,

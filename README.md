@@ -192,6 +192,27 @@ GitHub Actions.
 - Every focusable element gets the same strong focus ring (`globals.css`), and
   the first Tab stop is a "Skip to main content" link.
 
+## Owners
+
+- **Owners** (`/owners`) are the people and companies who own the homes
+  you let or manage: a record each (`property_owners`: person or company,
+  name, company name, optional email, phone, address and notes), shared
+  across the organisation. They are a separate thing from your
+  organisation, even if you are a landlord who owns your homes.
+- A home can have several owners and an owner several homes
+  (`property_owner_links`). Link an owner from the home's **Owners** card,
+  add a new one from there (they come back linked), or unlink one (with
+  Undo; their record is kept).
+- Rent you pay an owner (rent-to-rent) stays on the home: **Edit home** ›
+  "Do you rent this home from an owner?". Adding it there also makes the
+  owner record and links it (`owner_leases.owner_id`). Once it belongs to
+  an owner record, their name and phone are changed on the owner's page.
+  The owner's page lists their homes and the rent you pay them.
+- Owners are archived (with Undo), never deleted by the app. Managers and
+  above add, change, link and archive owners; staff can look.
+- The audit log records what happened to an owner, never their name or
+  contact details.
+
 ## Tenants
 
 - A tenant is added from a room (or from a home let as a whole) in three
@@ -304,7 +325,9 @@ it again to reset it. It only ever touches the demo account.
 
 - Email `test@rentdesk.test`, password `test@123` (change them with
   `DEMO_EMAIL` and `DEMO_PASSWORD`; at least 8 characters). Sign in on the
-  normal sign-in page.
+  normal sign-in page. The account is "Taylor Example", owner of "Demo
+  Lettings" (property manager), so it skips the set-up screen. Needs the
+  organisation set-up migration.
 - `ENABLE_TEST_LOGIN` is gone: real email and password sign-in replaced the
   test-only password box. Remove the variable from Vercel if it is set.
 
@@ -335,10 +358,62 @@ Owners can download their data and remove a past tenant's personal details.
 - Every business table has `organisation_id`. A user sees a row only if they
   are a member of that organisation (Postgres RLS, see
   `supabase/migrations/*_initial_schema.sql`).
-- Members can read, add and change rows. Only owners can delete rows and
-  manage memberships. The audit log can be read and added to, never changed.
-- Signing up creates an organisation ("My organisation") with the new user as
-  its owner. An organisation always keeps at least one owner.
+- **Roles** (`memberships.role`, highest first): **owner**, **admin**,
+  **manager**, **staff**. Only **active** memberships (`memberships.status`:
+  active, invited or removed) give any access. Everyone in an organisation
+  reads its rows. Managers and above add and change homes, rooms, owners
+  (and their links to homes), owners' rent, tenants and rent charges; every
+  role records rent payments. Only
+  owners change settings, download data, remove a tenant's details or
+  delete rows. Owners change or remove any member; admins any member who is
+  not an owner, and never make anyone an owner. The rules are in RLS (helper
+  `private.has_org_role(org, min_role)`, see
+  `supabase/migrations/*_membership_roles.sql`) and on the server: every
+  data function behind an action starts with `requireRole(ctx, "<role>")`
+  (`src/server/context.ts`), and the guard test lists the role for each.
+  The interface hides what a role cannot do (staff see no **+ New**, no
+  Edit or Archive), but that is never the only check. The audit log can be
+  read and added to, never changed.
+- Signing up creates a **profile** (`profiles`, the person's name) and no
+  organisation. The app then sends the person to **`/setup`** ("Set up your
+  organisation": their full name, the organisation's name, account type
+  Landlord or Property manager, and a contact email). That calls the
+  database function `public.create_organisation`, which works out who is
+  calling from the session, refuses a second organisation (people join more
+  by invitation), makes the organisation with the caller as owner,
+  saves their name and writes `audit_log` in one transaction. Nobody can
+  insert into `organisations` directly. An organisation always keeps at
+  least one owner.
+- **Members and invitations** (Settings › Members, `/settings/members`):
+  owners and admins invite people by email with a role (admin, manager or
+  staff), change roles (with Undo), remove members (with a confirm step;
+  the membership is kept as `removed` for history) and cancel invitations
+  (with Undo). Managers can see the list; staff cannot. Only the owner can
+  transfer ownership: pick a member, then type the organisation's name
+  (`public.transfer_ownership` checks it again); the old owner becomes an
+  admin. An invitation (`invitations`) holds only the SHA-256 hash of the
+  random token in its link, lasts 7 days and works once. The email is
+  Supabase Auth's sign-in email (code and link), sent from server code
+  with the publishable key (`src/server/invite-email.ts`); the inviter
+  also gets the link to copy, since Supabase's built-in email is limited to
+  a few per hour (set up custom SMTP in Supabase to lift that). Once the
+  invited person signs in, `/setup` lists their invitations (matched on
+  their confirmed email), and `/invite/<token>` shows one; joining calls
+  `public.accept_invitation`, which checks the email, adds the membership
+  and writes `audit_log`. Nobody can insert a membership directly.
+- **Several organisations:** someone in more than one picks the active one
+  from the organisation block at the top of the sidebar (in **More** on
+  phones). The choice is kept in an httpOnly cookie (`pd_active_org`,
+  just an organisation id) and is only a wish: on every request
+  `getMembership` (`src/server/context.ts`) picks from the person's own
+  **active** memberships, and falls back to the first organisation they
+  joined when the cookie is missing or names one they are not (or no
+  longer) in. Switching (`switchOrganisationAction`) checks the
+  membership first and writes `audit_log` (left out of Today's Recent
+  activity). Joining by invitation makes that organisation the active one;
+  signing out forgets the choice.
+- Profiles: you see your own and those of people in your organisations,
+  change only your own name, and never delete one (it goes with the user).
 - Money is stored as whole pence (`integer`), never as decimals.
 - The service role key bypasses RLS. It is only used by the daily cron
   routes (through `src/server/service-client.ts`) and in test setup.
@@ -357,6 +432,8 @@ Three ways in, all through Supabase Auth (decision D-12):
 
 - **Email and password** (the main one): `/sign-up` creates an account,
   `/sign-in` signs in. Passwords need at least 8 characters (at most 72).
+  A new account goes on to `/setup` to set up its organisation; every
+  page of the app sends people there until they have one.
 - **Email me a sign-in code** (`/sign-in/code`): the person gets a 6-digit
   code (and a link) by email and types the code in. New emails get an
   account automatically.

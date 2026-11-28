@@ -25,10 +25,43 @@ function admin() {
 }
 
 /**
- * A throwaway, confirmed user. Pass `password` to give it one, for the
- * email and password sign-in tests.
+ * Sets up a demo organisation for the user, the way the /setup screen
+ * does: signed in as them (publishable key, so RLS and the database
+ * function's own checks apply), never with the service role.
  */
-export async function createTestUser({ password }: { password?: string } = {}) {
+async function setUpOrganisation(email: string, hashedToken: string) {
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const signedIn = await client.auth.verifyOtp({
+    type: "email",
+    token_hash: hashedToken,
+  });
+  if (signedIn.error) {
+    throw new Error(`sign in for set-up failed: ${signedIn.error.message}`);
+  }
+  const { error } = await client.rpc("create_organisation", {
+    org_name: "E2E Demo Lettings",
+    org_account_type: "property_manager",
+    org_contact_email: email,
+    creator_full_name: "Taylor Example",
+  });
+  if (error) throw new Error(`set up organisation failed: ${error.message}`);
+  await client.auth.signOut({ scope: "local" });
+}
+
+/**
+ * A throwaway, confirmed user. Pass `password` to give it one, for the
+ * email and password sign-in tests. The user gets a demo organisation
+ * ("E2E Demo Lettings", owner "Taylor Example") unless `setUp` is false,
+ * in which case they land on the set-up screen.
+ */
+export async function createTestUser({
+  password,
+  setUp = true,
+}: { password?: string; setUp?: boolean } = {}) {
   const client = admin();
   const email = `e2e-${randomUUID().slice(0, 8)}@example.com`;
 
@@ -52,7 +85,8 @@ export async function createTestUser({ password }: { password?: string } = {}) {
     await page.goto(
       `/auth/confirm?token_hash=${link.data.properties.hashed_token}&type=email`,
     );
-    await page.waitForURL("**/dashboard");
+    // Without an organisation, the app sends them to set one up.
+    await page.waitForURL(setUp ? "**/dashboard" : "**/setup");
   }
 
   /** A password reset link, as if the person had asked for one. */
@@ -79,5 +113,84 @@ export async function createTestUser({ password }: { password?: string } = {}) {
     await client.auth.admin.deleteUser(userId);
   }
 
-  return { email, signIn, resetLink, cleanup };
+  if (setUp) {
+    try {
+      const link = await client.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+      });
+      if (link.error || !link.data.properties) {
+        throw new Error(`generate link failed: ${link.error?.message}`);
+      }
+      await setUpOrganisation(email, link.data.properties.hashed_token);
+    } catch (error) {
+      // Leave nothing behind when set-up fails part way.
+      await cleanup();
+      throw error;
+    }
+  }
+
+  return { email, userId, signIn, resetLink, cleanup };
+}
+
+/**
+ * Test setup only (service role): adds `memberId` to the organisation that
+ * `ownerId` set up, with the given role, and returns that organisation's
+ * id. Invitations (roadmap B4) will replace this in the app itself.
+ */
+export async function addToOrganisationOf(
+  ownerId: string,
+  memberId: string,
+  role: "admin" | "manager" | "staff",
+) {
+  const client = admin();
+  const { data: owned, error: readError } = await client
+    .from("memberships")
+    .select("organisation_id")
+    .eq("user_id", ownerId)
+    .eq("role", "owner")
+    .single();
+  if (readError || !owned) {
+    throw new Error(`find organisation failed: ${readError?.message}`);
+  }
+  const organisationId = owned.organisation_id as string;
+  const { error } = await client
+    .from("memberships")
+    .insert({ user_id: memberId, organisation_id: organisationId, role });
+  if (error) throw new Error(`add member failed: ${error.message}`);
+  return organisationId;
+}
+
+/** Test setup only (service role): a demo home in an organisation. */
+export async function addDemoHome(organisationId: string, name: string) {
+  const { data, error } = await admin()
+    .from("properties")
+    .insert({ organisation_id: organisationId, name, postcode: "LS6 1AA" })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`add home failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Test setup only (service role): gives an organisation another name. */
+export async function renameOrganisation(organisationId: string, name: string) {
+  const { error } = await admin()
+    .from("organisations")
+    .update({ name })
+    .eq("id", organisationId);
+  if (error) throw new Error(`rename organisation failed: ${error.message}`);
+}
+
+/** Test setup only (service role): the organisation a person owns. */
+export async function ownedOrganisationId(userId: string) {
+  const { data, error } = await admin()
+    .from("memberships")
+    .select("organisation_id")
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .single();
+  if (error || !data) {
+    throw new Error(`find organisation failed: ${error?.message}`);
+  }
+  return data.organisation_id as string;
 }

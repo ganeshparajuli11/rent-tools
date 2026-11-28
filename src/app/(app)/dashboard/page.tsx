@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import {
   primaryActionClass,
@@ -29,6 +30,7 @@ import { ProgressBar, StatCard, StatGrid } from "@/components/app/stat-card";
 import { MarkPaidButton } from "@/components/rent/mark-paid-button";
 import { RentStatusBadge } from "@/components/rent/rent-status-badge";
 import { formatPence } from "@/lib/money";
+import { firstNameOf } from "@/lib/people";
 import { formatMonth } from "@/lib/rent";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -38,7 +40,7 @@ import {
   filterRentRows,
   formatShortDate,
   formatTodayLine,
-  greetingFor,
+  greetingLine,
   londonHour,
   longEmptyPlaces,
   monthRentRows,
@@ -57,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { requireUser } from "@/server/auth";
 import { type Dashboard, getDashboard } from "@/server/dashboard";
+import { getFullName } from "@/server/organisation";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -98,23 +101,17 @@ export default async function TodayPage({
   // Read through the user's own session (publishable key), so RLS decides
   // which rows come back.
   const supabase = await createClient();
-  const dashboard = await getDashboard({ supabase, userId: user.id });
+  const ctx = { supabase, userId: user.id };
+  const [dashboard, fullName] = await Promise.all([
+    getDashboard(ctx),
+    getFullName(ctx),
+  ]);
 
-  if (!dashboard) {
-    return (
-      <section className="flex max-w-3xl flex-col gap-4">
-        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.035em] lg:text-4xl">
-          Today
-        </h1>
-        <p className="text-base text-muted-foreground">
-          Your account is not set up yet. Please sign out and sign in again.
-        </p>
-      </section>
-    );
-  }
+  // A new account sets up its organisation first.
+  if (!dashboard) redirect("/setup");
 
   const { today, summary, homes } = dashboard;
-  const greeting = `${greetingFor(londonHour())}.`;
+  const greeting = greetingLine(londonHour(), firstNameOf(fullName));
   const dateLine = formatTodayLine(today);
 
   if (homes.length === 0) {

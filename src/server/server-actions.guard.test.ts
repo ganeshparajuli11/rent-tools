@@ -3,6 +3,8 @@ import { join, relative, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import type { Role } from "@/lib/roles";
+
 /**
  * Guards for every way the browser can change data: server actions and
  * route handlers. These read the source files, so a new action that skips a
@@ -13,7 +15,9 @@ import { describe, expect, it } from "vitest";
  *  - go through `runAction` (src/server/run-action.ts), which checks the
  *    session and applies the rate limiter, and
  *  - call a data function in src/server/ that derives the organisation on
- *    the server (`getOrganisationId`) and writes `audit_log` (`writeAudit`).
+ *    the server and checks the person's role (`requireRole`, with the role
+ *    listed in DATA_FUNCTION_ROLES below), and writes `audit_log`
+ *    (`writeAudit`).
  *
  * The sign-in actions run before there is a session, so they are listed
  * by name below and checked for a rate limit and Zod instead. Every route
@@ -105,14 +109,106 @@ const NO_AUDIT_DATA_FUNCTIONS: Record<string, string> = {
   "search.searchRecords": "reads only",
 };
 
+/**
+ * Data functions for a person who has no organisation yet, so there is
+ * none to look up. Each must hand over to a database function that checks
+ * the session itself and writes audit_log in the same transaction.
+ * Reviewed by hand: add to this list only with a reason.
+ */
+const ORGANISATION_SETUP_DATA_FUNCTIONS: Record<string, RegExp> = {
+  // public.create_organisation: works out the caller from the session,
+  // refuses a second organisation, makes them owner, writes audit_log.
+  "organisation.setUpOrganisation": /\.rpc\("create_organisation",/,
+  // public.accept_invitation: works out the caller from the session, checks
+  // the invitation is theirs (confirmed email) and still open, adds the
+  // membership, writes audit_log.
+  "invitations.acceptInvitation": /\.rpc\("accept_invitation",/,
+};
+
+/**
+ * Data functions that act on an organisation the person names rather than
+ * their active one: the organisation switcher (roadmap B5). Each must
+ * first check, with the person's own client, that they are an active
+ * member of that organisation, and refuse otherwise; it still writes
+ * audit_log. Reviewed by hand: add to this list only with a reason.
+ */
+const NAMED_ORGANISATION_DATA_FUNCTIONS: Record<string, RegExp> = {
+  // Any role may switch; the membership check is the permission.
+  "organisation.switchOrganisation":
+    /const membership = await getMembershipIn\(ctx, organisationId\);\s+if \(!membership\) throw new UserFacingError\(/,
+};
+
+/**
+ * Data functions whose change and its audit_log row are both written by
+ * one database function, in one transaction. They still check the role on
+ * the server first. Reviewed by hand: add to this list only with a reason.
+ */
+const AUDITED_IN_DATABASE: Record<string, RegExp> = {
+  // public.transfer_ownership checks the caller is the owner and the typed
+  // name, swaps the two roles and writes audit_log.
+  "members.transferOwnership": /\.rpc\("transfer_ownership",/,
+};
+
+/**
+ * The least role each data function behind a server action needs
+ * (PRODUCT_SPEC.md §5: owner > admin > manager > staff). The guard checks
+ * the function starts with `requireRole(ctx, "<role>")`, so changing a
+ * role limit means changing this list too. Row-level security enforces the
+ * same limits in the database (supabase/migrations/20261124030000_*).
+ * A new data function must be added here, with its role.
+ */
+const DATA_FUNCTION_ROLES: Record<string, Role> = {
+  // Homes, rooms and photos: managers and above.
+  "homes.createHome": "manager",
+  "homes.updateHome": "manager",
+  "homes.setHomeArchived": "manager",
+  "homes.addRoom": "manager",
+  "homes.renameRoom": "manager",
+  "homes.setRoomArchived": "manager",
+  "photos.preparePhotoUpload": "manager",
+  "photos.addPhoto": "manager",
+  "photos.removePhoto": "manager",
+  // Owner records and their links to homes: managers and above.
+  "owners.createOwner": "manager",
+  "owners.updateOwner": "manager",
+  "owners.setOwnerArchived": "manager",
+  "owners.linkOwner": "manager",
+  "owners.unlinkOwner": "manager",
+  // Tenants: managers and above. Removing a past tenant's details cannot
+  // be undone: owners only.
+  "tenants.createTenant": "manager",
+  "tenants.updateTenant": "manager",
+  "tenants.moveTenantOut": "manager",
+  "tenants.undoMoveTenantOut": "manager",
+  "tenants.removeTenantDetails": "owner",
+  // Rent payments are operational: every role, staff included.
+  "rent.recordPayment": "staff",
+  "rent.removePayment": "staff",
+  "rent.restorePayment": "staff",
+  // Organisation settings: owners only.
+  "settings.setOverdueEmailEnabled": "owner",
+  // Members and invitations: owners and admins (PRODUCT_SPEC.md §5).
+  // Moving ownership: the owner only.
+  "members.inviteMember": "admin",
+  "members.cancelInvitation": "admin",
+  "members.restoreInvitation": "admin",
+  "members.changeMemberRole": "admin",
+  "members.removeMember": "admin",
+  "members.transferOwnership": "owner",
+  // Reads only: anyone in the organisation (getOrganisationId is enough).
+  "search.searchRecords": "staff",
+};
+
 const files = sourceFiles();
 const byPath = new Map(files.map((file) => [file.path, file]));
 // `actions.ts`, or a named one such as `photo-actions.ts`.
 const actionFiles = files.filter((file) =>
   /(^|\/)([\w-]+-)?actions\.ts$/.test(file.path),
 );
-const appActionFiles = actionFiles.filter((file) =>
-  file.path.startsWith("app/(app)/"),
+// The signed-in area, plus organisation set-up (signed in, before the shell).
+const appActionFiles = actionFiles.filter(
+  (file) =>
+    file.path.startsWith("app/(app)/") || file.path.startsWith("app/(setup)/"),
 );
 const routeFiles = files.filter((file) => /(^|\/)route\.ts$/.test(file.path));
 
@@ -122,10 +218,14 @@ describe("server actions", () => {
       expect.arrayContaining([
         "app/(app)/homes/actions.ts",
         "app/(app)/homes/photo-actions.ts",
+        "app/(app)/organisation-actions.ts",
+        "app/(app)/owners/actions.ts",
         "app/(app)/rent/actions.ts",
         "app/(app)/search/actions.ts",
         "app/(app)/settings/actions.ts",
+        "app/(app)/settings/members/actions.ts",
         "app/(app)/tenants/actions.ts",
+        "app/(setup)/setup/actions.ts",
       ]),
     );
   });
@@ -181,10 +281,39 @@ describe("server actions", () => {
           const dataFile = byPath.get(modules.get(alias!)!);
           expect(dataFile, `${alias}`).toBeDefined();
           const dataBody = functionBody(dataFile!.text, fn!) ?? "";
-          expect(dataBody, `${alias}.${fn}`).toMatch(
-            /getOrganisationId\(ctx\)/,
-          );
+          const setup = ORGANISATION_SETUP_DATA_FUNCTIONS[`${alias}.${fn}`];
+          if (setup) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(setup);
+            continue;
+          }
+          const named = NAMED_ORGANISATION_DATA_FUNCTIONS[`${alias}.${fn}`];
+          if (named) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(named);
+            expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
+            continue;
+          }
+          const role = DATA_FUNCTION_ROLES[`${alias}.${fn}`];
+          expect(
+            role,
+            `${alias}.${fn} needs a role in DATA_FUNCTION_ROLES`,
+          ).toBeDefined();
+          const readsOnly = Boolean(NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]);
+          if (readsOnly && role === "staff") {
+            // Any active member: the organisation look-up is the check.
+            expect(dataBody, `${alias}.${fn}`).toMatch(
+              /getOrganisationId\(ctx\)|requireRole\(ctx, "staff"\)/,
+            );
+          } else {
+            expect(dataBody, `${alias}.${fn}`).toContain(
+              `requireRole(ctx, "${role}")`,
+            );
+          }
           if (NO_AUDIT_DATA_FUNCTIONS[`${alias}.${fn}`]) continue;
+          const inDatabase = AUDITED_IN_DATABASE[`${alias}.${fn}`];
+          if (inDatabase) {
+            expect(dataBody, `${alias}.${fn}`).toMatch(inDatabase);
+            continue;
+          }
           expect(dataBody, `${alias}.${fn}`).toMatch(/writeAudit\(ctx,/);
         }
       },
@@ -201,6 +330,113 @@ describe("server actions", () => {
     // The user's own client, so RLS applies.
     expect(body).toMatch(/createClient\(\)/);
     expect(body).not.toMatch(/service/i);
+  });
+
+  it("every role in DATA_FUNCTION_ROLES belongs to a real data function", () => {
+    for (const key of Object.keys(DATA_FUNCTION_ROLES)) {
+      const [module, fn] = key.split(".");
+      const file = byPath.get(`server/${module}.ts`);
+      expect(file, key).toBeDefined();
+      expect(functionBody(file!.text, fn!), key).not.toBeNull();
+    }
+  });
+
+  it("requireRole reads active memberships only and checks the rank", () => {
+    const context = byPath.get("server/context.ts")!.text;
+    expect(functionBody(context, "getMembership")).toMatch(
+      /\.eq\("status", "active"\)/,
+    );
+    expect(functionBody(context, "getOrganisationId")).toMatch(
+      /getMembership\(ctx\)/,
+    );
+    const requireRole = functionBody(context, "requireRole") ?? "";
+    expect(requireRole).toMatch(/getMembership\(ctx\)/);
+    expect(requireRole).toMatch(/hasRole\(membership\.role, min\)/);
+    expect(requireRole).toMatch(/throw new UserFacingError\(/);
+  });
+
+  it("the active organisation is always one of the person's own active memberships", () => {
+    const context = byPath.get("server/context.ts")!.text;
+    const getMembership = functionBody(context, "getMembership") ?? "";
+    expect(getMembership).toMatch(/\.eq\("user_id", ctx\.userId\)/);
+    expect(getMembership).toMatch(/getPreferredOrganisationId\(\)/);
+    expect(getMembership).toMatch(/pickActiveMembership\(data, preferred\)/);
+
+    const shell = functionBody(byPath.get("server/shell.ts")!.text, "getShell");
+    expect(shell).toMatch(/\.eq\("status", "active"\)/);
+    expect(shell).toMatch(/pickActiveMembership\(data, preferred\)/);
+
+    const membershipIn = functionBody(context, "getMembershipIn") ?? "";
+    expect(membershipIn).toMatch(/\.eq\("user_id", ctx\.userId\)/);
+    expect(membershipIn).toMatch(/\.eq\("organisation_id", organisationId\)/);
+    expect(membershipIn).toMatch(/\.eq\("status", "active"\)/);
+  });
+
+  it("only the switcher and accepting an invitation set the active organisation", () => {
+    const setters = files
+      .filter((file) => file.path !== "server/active-organisation.ts")
+      .filter((file) => /setPreferredOrganisationId\(/.test(file.text))
+      .map((file) => file.path)
+      .sort();
+    expect(setters).toEqual([
+      "server/invitations.ts",
+      "server/organisation.ts",
+    ]);
+    const invitations = functionBody(
+      byPath.get("server/invitations.ts")!.text,
+      "acceptInvitation",
+    );
+    // Only after the database function has made the membership.
+    expect(invitations).toMatch(
+      /\.rpc\("accept_invitation",[\s\S]*setPreferredOrganisationId\(data\)/,
+    );
+  });
+
+  it("member changes never touch yourself or an owner", () => {
+    const text = byPath.get("server/members.ts")!.text;
+    const check = functionBody(text, "changeableMember") ?? "";
+    expect(check).toMatch(/\.eq\("organisation_id", organisationId\)/);
+    expect(check).toMatch(/data\.user_id === ctx\.userId/);
+    expect(check).toMatch(/data\.role === "owner"/);
+    for (const name of ["changeMemberRole", "removeMember"]) {
+      expect(functionBody(text, name), name).toMatch(
+        /changeableMember\(ctx, organisationId, membershipId\)/,
+      );
+    }
+  });
+
+  it("invitations store only the token's hash", () => {
+    const text = byPath.get("server/members.ts")!.text;
+    const invite = functionBody(text, "inviteMember") ?? "";
+    expect(invite).toMatch(/token_hash: await hashInvitationToken\(token\)/);
+    // A tighter limit than ordinary changes, because each one sends email.
+    expect(invite).toMatch(/rateLimit\("invite-email"/);
+  });
+
+  it("owner audit rows never hold names or contact details", () => {
+    const owners = byPath.get("server/owners.ts")!.text;
+    const homes = byPath.get("server/homes.ts")!.text;
+    const blocks = (text: string) =>
+      [...text.matchAll(/writeAudit\(ctx, \{[\s\S]*?\n\s*\}\);/g)].map(
+        (match) => match[0],
+      );
+    const ownerBlocks = blocks(owners);
+    expect(ownerBlocks.length).toBeGreaterThanOrEqual(6);
+    for (const block of ownerBlocks) {
+      const allowed = block
+        .replace("filledFields(values)", "")
+        .replace("values.ownerType", "");
+      expect(allowed).not.toMatch(
+        /values|full_?name|company_?name|email|phone|notes|nameOf/i,
+      );
+    }
+    // Rent paid to an owner is logged without the owner's name or phone.
+    for (const block of blocks(homes).filter((b) =>
+      /"home\.(created|updated)"/.test(b),
+    )) {
+      expect(block).toMatch(/owner: leaseFacts\(/);
+      expect(block).not.toMatch(/owner: (before|values)\.owner\b/);
+    }
   });
 
   it("the sign-in actions are the known ones, rate limited and validated", () => {

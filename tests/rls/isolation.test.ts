@@ -7,7 +7,9 @@
  * What it does:
  *  1. Uses the service role key ONLY to create two throwaway users (A and B)
  *     and sign them in. No emails are sent.
- *  2. The sign-up trigger gives each user their own organisation.
+ *  2. Each user sets up their own organisation through the database
+ *     function create_organisation, as the /setup screen does (the sign-up
+ *     trigger only makes a profile).
  *  3. Each user, through their own session (publishable key + RLS), creates
  *     one row in every business table.
  *  4. Checks each user sees only their own organisation's rows, cannot write
@@ -23,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
 import { REMOVED_TENANT_NAME } from "@/lib/validation/data-rights";
 import type { UpdateHomeValues } from "@/lib/validation/homes";
+import { ALREADY_SET_UP } from "@/lib/validation/organisation";
 import type { TenantValues } from "@/lib/validation/tenants";
 import { todayInLondon } from "@/lib/dates";
 import { addMonths, monthOf, monthStart } from "@/lib/rent";
@@ -30,6 +33,7 @@ import { type Ctx, UserFacingError } from "@/server/context";
 import { getDashboard } from "@/server/dashboard";
 import { exportData } from "@/server/data-export";
 import * as homes from "@/server/homes";
+import * as organisation from "@/server/organisation";
 import * as rent from "@/server/rent";
 import type { EmailMessage } from "@/server/email";
 import { sendOverdueDigests } from "@/server/overdue-reminders";
@@ -126,7 +130,7 @@ async function createSignedInUser(label: "A" | "B"): Promise<TestUser> {
   const created = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { organisation_name: `RLS test ${runId} ${label}` },
+    user_metadata: { full_name: `Tester ${label} Example` },
   });
   if (created.error || !created.data.user) {
     throw new Error(`create user ${label} failed: ${created.error?.message}`);
@@ -152,7 +156,18 @@ async function createSignedInUser(label: "A" | "B"): Promise<TestUser> {
     `sign in ${label}`,
   );
 
-  // The sign-up trigger should have made exactly one owner membership.
+  // Set up the organisation as the /setup screen does.
+  must(
+    await client.rpc("create_organisation", {
+      org_name: `RLS test ${runId} ${label}`,
+      org_account_type: label === "A" ? "landlord" : "property_manager",
+      org_contact_email: `contact-${label.toLowerCase()}@example.com`,
+      creator_full_name: `Tester ${label} Example`,
+    }),
+    `set up organisation ${label}`,
+  );
+
+  // That should have made exactly one owner membership.
   const membership = must<{
     id: string;
     organisation_id: string;
@@ -451,6 +466,268 @@ describe("row-level security isolation", () => {
       .delete()
       .eq("id", a.ids.memberships);
     expect(error).not.toBeNull();
+  });
+});
+
+/**
+ * Roadmap B2: setting up an organisation and profiles. Profiles belong to
+ * people, not organisations, so they are checked here rather than in the
+ * table loop above: you see your own profile and those of people in your
+ * organisations, change only your own, and delete none.
+ */
+describe("organisation set-up and profiles", () => {
+  const ctxOf = (user: { client: SupabaseClient; userId: string }): Ctx => ({
+    supabase: user.client as unknown as SupabaseClient<Database>,
+    userId: user.userId,
+  });
+
+  /** A third user with no organisation yet, signed in. */
+  async function createUserWithoutOrganisation() {
+    const email = `rls-test-${runId}-c-${randomUUID().slice(0, 6)}@example.com`;
+    const created = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { full_name: "Tester C Example" },
+    });
+    if (created.error || !created.data.user) {
+      throw new Error(`create user C failed: ${created.error?.message}`);
+    }
+    const userId = created.data.user.id;
+    createdUserIds.push(userId);
+    const link = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    if (link.error || !link.data.properties) {
+      throw new Error(`generate link C failed: ${link.error?.message}`);
+    }
+    const client = createClient(url!, publishableKey!, clientOptions);
+    must(
+      await client.auth.verifyOtp({
+        type: "email",
+        token_hash: link.data.properties.hashed_token,
+      }),
+      "sign in C",
+    );
+    return { userId, client };
+  }
+
+  it("set-up stored the account type and contact email, made an owner and audited without personal details", async () => {
+    const { data: org } = await a.client
+      .from("organisations")
+      .select("name, account_type, contact_email")
+      .eq("id", a.orgId)
+      .single();
+    expect(org).toEqual({
+      name: `RLS test ${runId} A`,
+      account_type: "landlord",
+      contact_email: "contact-a@example.com",
+    });
+
+    const { data: audit } = await a.client
+      .from("audit_log")
+      .select("user_id, record_id, changes")
+      .eq("action", "organisation.created");
+    expect(audit).toEqual([
+      {
+        user_id: a.userId,
+        record_id: a.orgId,
+        changes: { account_type: "landlord" },
+      },
+    ]);
+  });
+
+  it("nobody sets up a second organisation, inserts one directly, or calls set-up signed out", async () => {
+    const again = await a.client.rpc("create_organisation", {
+      org_name: "Second org",
+      org_account_type: "landlord",
+      org_contact_email: "second@example.com",
+      creator_full_name: "Tester A Example",
+    });
+    expect(again.error?.code).toBe("PD001");
+
+    await expect(
+      organisation.setUpOrganisation(ctxOf(a), {
+        fullName: "Tester A Example",
+        organisationName: "Second org",
+        accountType: "landlord",
+        contactEmail: "second@example.com",
+      }),
+    ).rejects.toThrow(ALREADY_SET_UP);
+
+    const direct = await a.client
+      .from("organisations")
+      .insert({ name: "Sneaky org" })
+      .select("id");
+    expect(direct.error).not.toBeNull();
+
+    const signedOut = await anon.rpc("create_organisation", {
+      org_name: "Anon org",
+      org_account_type: "landlord",
+      org_contact_email: "anon@example.com",
+      creator_full_name: "Anon",
+    });
+    expect(signedOut.error).not.toBeNull();
+
+    const { count } = await admin
+      .from("memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", a.userId);
+    expect(count).toBe(1);
+  });
+
+  it("set-up refuses values that are not valid", async () => {
+    const c = await createUserWithoutOrganisation();
+    for (const args of [
+      { org_name: " ", org_account_type: "landlord" },
+      { org_name: "Org C", org_account_type: "tenant" },
+      { org_name: "Org C", org_contact_email: "not-an-email" },
+      { org_name: "Org C", creator_full_name: " " },
+    ]) {
+      const { error } = await c.client.rpc("create_organisation", {
+        org_account_type: "landlord",
+        org_contact_email: "c@example.com",
+        creator_full_name: "Tester C Example",
+        ...args,
+      });
+      expect(error?.code, JSON.stringify(args)).toBe("22023");
+    }
+    const { count } = await admin
+      .from("memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", c.userId);
+    expect(count).toBe(0);
+    expect(await organisation.hasOrganisation(ctxOf(c))).toBe(false);
+  });
+
+  it("each person sees their own profile, and colleagues' only once they share an organisation", async () => {
+    const c = await createUserWithoutOrganisation();
+
+    // The sign-up trigger made C's profile with the name given at sign-up.
+    expect(await organisation.getFullName(ctxOf(c))).toBe("Tester C Example");
+    // C has no organisation, so sees no organisation and no one else.
+    const { data: cOrgs } = await c.client.from("organisations").select("id");
+    expect(cOrgs).toEqual([]);
+    const { data: cSees } = await c.client.from("profiles").select("id");
+    expect(cSees?.map((p) => p.id)).toEqual([c.userId]);
+
+    for (const [me, other] of [
+      [a, b],
+      [b, a],
+    ] as const) {
+      const { data } = await me.client.from("profiles").select("id, full_name");
+      const ids = (data ?? []).map((p) => p.id);
+      expect(ids, `${me.label} sees own profile`).toContain(me.userId);
+      expect(ids, `${me.label} must not see ${other.label}`).not.toContain(
+        other.userId,
+      );
+      expect(ids).not.toContain(c.userId);
+      expect(await organisation.getFullName(ctxOf(me))).toBe(
+        `Tester ${me.label} Example`,
+      );
+    }
+
+    // C joins A's organisation as staff (test setup, service role): now A
+    // and C see each other's profiles, and B still sees neither.
+    must(
+      await admin
+        .from("memberships")
+        .insert({ user_id: c.userId, organisation_id: a.orgId, role: "staff" })
+        .select("id")
+        .single(),
+      "add C to A's organisation",
+    );
+    const { data: aSees } = await a.client.from("profiles").select("id");
+    expect(aSees?.map((p) => p.id)).toEqual(
+      expect.arrayContaining([a.userId, c.userId]),
+    );
+    const { data: cSeesNow } = await c.client.from("profiles").select("id");
+    expect(cSeesNow?.map((p) => p.id)).toEqual(
+      expect.arrayContaining([a.userId, c.userId]),
+    );
+    const { data: bSees } = await b.client.from("profiles").select("id");
+    expect(bSees?.map((p) => p.id)).toEqual([b.userId]);
+
+    // Being colleagues does not let C change A's name, or set up an
+    // organisation of their own now they have one.
+    const changed = await c.client
+      .from("profiles")
+      .update({ full_name: "Hacked" })
+      .eq("id", a.userId)
+      .select("id");
+    expect(changed.error !== null || changed.data?.length === 0).toBe(true);
+    expect(await organisation.getFullName(ctxOf(a))).toBe("Tester A Example");
+
+    await admin.from("memberships").delete().eq("user_id", c.userId);
+  });
+
+  it("people change only their own name, and nobody deletes or forges a profile", async () => {
+    const own = await a.client
+      .from("profiles")
+      .update({ full_name: "Tester A Renamed" })
+      .eq("id", a.userId)
+      .select("full_name")
+      .single();
+    expect(own.data?.full_name).toBe("Tester A Renamed");
+
+    const others = await a.client
+      .from("profiles")
+      .update({ full_name: "Hacked" })
+      .eq("id", b.userId)
+      .select("id");
+    expect(others.error !== null || others.data?.length === 0).toBe(true);
+
+    const deleted = await a.client
+      .from("profiles")
+      .delete()
+      .eq("id", a.userId)
+      .select("id");
+    expect(deleted.error !== null || deleted.data?.length === 0).toBe(true);
+
+    const forged = await a.client
+      .from("profiles")
+      .insert({ id: b.userId, full_name: "Forged" })
+      .select("id");
+    expect(forged.error).not.toBeNull();
+
+    const { data: still } = await admin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", [a.userId, b.userId])
+      .order("full_name");
+    expect(still).toEqual(
+      expect.arrayContaining([
+        { id: a.userId, full_name: "Tester A Renamed" },
+        { id: b.userId, full_name: "Tester B Example" },
+      ]),
+    );
+
+    const { data: anonSees } = await anon.from("profiles").select("id");
+    expect(anonSees ?? []).toHaveLength(0);
+
+    await a.client
+      .from("profiles")
+      .update({ full_name: "Tester A Example" })
+      .eq("id", a.userId);
+  });
+
+  it("B cannot change A's account type or contact email", async () => {
+    await b.client
+      .from("organisations")
+      .update({
+        account_type: "property_manager",
+        contact_email: "x@example.com",
+      })
+      .eq("id", a.orgId);
+    const { data } = await admin
+      .from("organisations")
+      .select("account_type, contact_email")
+      .eq("id", a.orgId)
+      .single();
+    expect(data).toEqual({
+      account_type: "landlord",
+      contact_email: "contact-a@example.com",
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { todayInLondon } from "@/lib/dates";
+import { ownerDisplayName } from "@/lib/owners";
 import {
   DEFAULT_HOMES_SORT,
   type HomeSortKey,
@@ -14,6 +15,7 @@ import {
   type Ctx,
   getOrganisationId,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -44,12 +46,26 @@ export type HomeListItem = {
   coverUrl: string | null;
 };
 
+/** Rent the organisation pays an owner for this home (an owner lease). */
 export type HomeOwner = {
+  /** The owner lease. */
   id: string;
+  /** The owner record it is paid to (null only for leases from before C1). */
+  ownerId: string | null;
   name: string;
   phone: string | null;
   rentPence: number;
   dueDay: number;
+};
+
+/** An owner record linked to this home (property_owner_links). */
+export type LinkedOwner = {
+  id: string;
+  name: string;
+  ownerType: "individual" | "company";
+  phone: string | null;
+  email: string | null;
+  archived: boolean;
 };
 
 /** The current tenant of a room or of a whole home, as shown on the home page. */
@@ -88,6 +104,8 @@ export type HomeDetail = {
   pastTenants: PastTenant[];
   pastTenantCount: number;
   owner: HomeOwner | null;
+  /** Owners linked to the home, by name. */
+  owners: LinkedOwner[];
 };
 
 function toLetType(value: string | null): LetType {
@@ -204,7 +222,7 @@ export async function getHome(
   const { data, error } = await ctx.supabase
     .from("properties")
     .select(
-      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, name, archived_at, created_at), owner_leases(id, owner_name, owner_phone, rent_pence, due_day, start_date, end_date, created_at), tenancies(id, room_id, tenant_name, rent_pence, due_day, end_date)",
+      "id, name, address_line1, address_line2, city, postcode, property_type, archived_at, rooms(id, name, archived_at, created_at), owner_leases(id, owner_id, owner_name, owner_phone, rent_pence, due_day, start_date, end_date, created_at, property_owners(owner_type, full_name, company_name, phone)), tenancies(id, room_id, tenant_name, rent_pence, due_day, end_date), property_owner_links(owner_id, property_owners(id, owner_type, full_name, company_name, phone, email, archived_at))",
     )
     .eq("id", id)
     .eq("organisation_id", organisationId)
@@ -279,13 +297,65 @@ export async function getHome(
     owner: lease
       ? {
           id: lease.id,
-          name: lease.owner_name,
-          phone: lease.owner_phone,
+          ownerId: lease.owner_id,
+          // The owner record's name and phone; the lease's own copy only
+          // for a lease from before owner records.
+          name: lease.property_owners
+            ? ownerDisplayName({
+                ownerType: lease.property_owners.owner_type,
+                fullName: lease.property_owners.full_name,
+                companyName: lease.property_owners.company_name,
+              })
+            : lease.owner_name,
+          phone: lease.property_owners
+            ? lease.property_owners.phone
+            : lease.owner_phone,
           rentPence: lease.rent_pence,
           dueDay: lease.due_day,
         }
       : null,
+    owners: data.property_owner_links
+      .flatMap((link) =>
+        link.property_owners
+          ? [
+              {
+                id: link.property_owners.id,
+                name: ownerDisplayName({
+                  ownerType: link.property_owners.owner_type,
+                  fullName: link.property_owners.full_name,
+                  companyName: link.property_owners.company_name,
+                }),
+                ownerType:
+                  link.property_owners.owner_type === "company"
+                    ? ("company" as const)
+                    : ("individual" as const),
+                phone: link.property_owners.phone,
+                email: link.property_owners.email,
+                archived: link.property_owners.archived_at !== null,
+              },
+            ]
+          : [],
+      )
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+/** A home's name, for headings and back links. Null when not found. */
+export async function getHomeName(
+  ctx: Ctx,
+  id: string,
+): Promise<{ id: string; name: string; archived: boolean } | null> {
+  const organisationId = await getOrganisationId(ctx);
+  const { data, error } = await ctx.supabase
+    .from("properties")
+    .select("id, name, archived_at")
+    .eq("id", id)
+    .eq("organisation_id", organisationId)
+    .maybeSingle();
+  if (error) throw error;
+  return data
+    ? { id: data.id, name: data.name, archived: data.archived_at !== null }
+    : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +402,7 @@ function roomRows(
 }
 
 export async function createHome(ctx: Ctx, values: CreateHomeValues) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: home, error } = await ctx.supabase
     .from("properties")
@@ -349,6 +419,7 @@ export async function createHome(ctx: Ctx, values: CreateHomeValues) {
     .single();
   if (error) throw error;
 
+  let createdOwnerId: string | null = null;
   try {
     if (values.letType === "by_room" && values.roomCount) {
       const { error: roomsError } = await ctx.supabase
@@ -358,11 +429,20 @@ export async function createHome(ctx: Ctx, values: CreateHomeValues) {
     }
 
     if (values.owner) {
+      // The owner becomes a record of their own, linked to the home.
+      createdOwnerId = await ownerForLease(
+        ctx,
+        organisationId,
+        home.id,
+        values.owner,
+        [],
+      );
       const { error: leaseError } = await ctx.supabase
         .from("owner_leases")
         .insert({
           organisation_id: organisationId,
           property_id: home.id,
+          owner_id: createdOwnerId,
           owner_name: values.owner.name,
           owner_phone: values.owner.phone,
           rent_pence: values.owner.rentPence,
@@ -385,6 +465,21 @@ export async function createHome(ctx: Ctx, values: CreateHomeValues) {
         .update({ archived_at: new Date().toISOString() })
         .eq("id", home.id);
     }
+    // And no owner record made only for this home: removed if allowed,
+    // otherwise archived.
+    if (createdOwnerId) {
+      const { data: removedOwner } = await ctx.supabase
+        .from("property_owners")
+        .delete()
+        .eq("id", createdOwnerId)
+        .select("id");
+      if (!removedOwner?.length) {
+        await ctx.supabase
+          .from("property_owners")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", createdOwnerId);
+      }
+    }
     throw stepError;
   }
 
@@ -393,7 +488,8 @@ export async function createHome(ctx: Ctx, values: CreateHomeValues) {
     action: "home.created",
     table: "properties",
     recordId: home.id,
-    changes: { after: values },
+    // No owner name or phone: the audit log holds no personal details.
+    changes: { after: { ...values, owner: leaseFacts(values.owner) } },
   });
 
   return { id: home.id };
@@ -404,7 +500,7 @@ export async function updateHome(
   id: string,
   values: UpdateHomeValues,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
   const before = await getHome(ctx, id);
   if (!before) throw new UserFacingError(NOT_FOUND);
 
@@ -450,10 +546,31 @@ export async function updateHome(
   }
 
   // Owner lease: update, add, or end it (never delete it).
-  if (values.owner && before.owner) {
+  if (values.owner && before.owner?.ownerId) {
+    // Paid to an owner record: the form only changes the rent and the day.
+    // Their name and phone are changed on the owner's own page.
     const { error: leaseError } = await ctx.supabase
       .from("owner_leases")
       .update({
+        rent_pence: values.owner.rentPence,
+        due_day: values.owner.dueDay,
+      })
+      .eq("id", before.owner.id)
+      .eq("organisation_id", organisationId);
+    if (leaseError) throw leaseError;
+  } else if (values.owner && before.owner) {
+    // A lease from before owner records: give it one.
+    const ownerId = await ownerForLease(
+      ctx,
+      organisationId,
+      id,
+      values.owner,
+      before.owners,
+    );
+    const { error: leaseError } = await ctx.supabase
+      .from("owner_leases")
+      .update({
+        owner_id: ownerId,
         owner_name: values.owner.name,
         owner_phone: values.owner.phone,
         rent_pence: values.owner.rentPence,
@@ -463,11 +580,19 @@ export async function updateHome(
       .eq("organisation_id", organisationId);
     if (leaseError) throw leaseError;
   } else if (values.owner) {
+    const ownerId = await ownerForLease(
+      ctx,
+      organisationId,
+      id,
+      values.owner,
+      before.owners,
+    );
     const { error: leaseError } = await ctx.supabase
       .from("owner_leases")
       .insert({
         organisation_id: organisationId,
         property_id: id,
+        owner_id: ownerId,
         owner_name: values.owner.name,
         owner_phone: values.owner.phone,
         rent_pence: values.owner.rentPence,
@@ -499,15 +624,15 @@ export async function updateHome(
         postcode: before.postcode,
         letType: before.letType,
         roomCount: before.rooms.length,
-        owner: before.owner,
+        owner: leaseFacts(before.owner),
       },
-      after: values,
+      after: { ...values, owner: leaseFacts(values.owner) },
     },
   });
 }
 
 export async function setHomeArchived(ctx: Ctx, id: string, archived: boolean) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   // A home with tenants living in it stays on the list.
   if (
@@ -542,7 +667,7 @@ export async function setHomeArchived(ctx: Ctx, id: string, archived: boolean) {
 }
 
 export async function addRoom(ctx: Ctx, propertyId: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: home, error } = await ctx.supabase
     .from("properties")
@@ -591,7 +716,7 @@ export async function addRoom(ctx: Ctx, propertyId: string) {
 }
 
 export async function renameRoom(ctx: Ctx, roomId: string, name: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: before } = await ctx.supabase
     .from("rooms")
@@ -625,7 +750,7 @@ export async function setRoomArchived(
   roomId: string,
   archived: boolean,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   if (archived) {
     // A room with a tenant living in it cannot be archived.
@@ -663,4 +788,75 @@ export async function setRoomArchived(
     recordId: roomId,
   });
   return { name: data[0]!.name, propertyId: data[0]!.property_id };
+}
+
+// ---------------------------------------------------------------------------
+// Owner records for rent paid to an owner (roadmap C1)
+// ---------------------------------------------------------------------------
+
+/** What the audit log keeps about rent paid to an owner: no name or phone. */
+function leaseFacts(
+  owner: { rentPence: number; dueDay: number } | null,
+): { rentPence: number; dueDay: number } | null {
+  return owner ? { rentPence: owner.rentPence, dueDay: owner.dueDay } : null;
+}
+
+/**
+ * The owner record that rent typed on the home form is paid to: an owner
+ * already linked to this home with the same name, or a new owner record
+ * (a person, with the name and phone typed) linked to the home.
+ */
+async function ownerForLease(
+  ctx: Ctx,
+  organisationId: string,
+  propertyId: string,
+  owner: { name: string; phone: string | null },
+  linked: LinkedOwner[],
+): Promise<string> {
+  const sameName = linked.find(
+    (candidate) =>
+      !candidate.archived &&
+      candidate.name.trim().toLowerCase() === owner.name.trim().toLowerCase(),
+  );
+  if (sameName) return sameName.id;
+
+  const { data: record, error } = await ctx.supabase
+    .from("property_owners")
+    .insert({
+      organisation_id: organisationId,
+      owner_type: "individual",
+      full_name: owner.name,
+      phone: owner.phone,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await writeAudit(ctx, {
+    organisationId,
+    action: "owner.created",
+    table: "property_owners",
+    recordId: record.id,
+    changes: { after: { ownerType: "individual", from: "home" } },
+  });
+
+  const { data: link, error: linkError } = await ctx.supabase
+    .from("property_owner_links")
+    .insert({
+      organisation_id: organisationId,
+      property_id: propertyId,
+      owner_id: record.id,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (linkError) throw linkError;
+  await writeAudit(ctx, {
+    organisationId,
+    action: "owner.linked",
+    table: "property_owner_links",
+    recordId: link.id,
+    changes: { after: { homeId: propertyId, ownerId: record.id } },
+  });
+
+  return record.id;
 }

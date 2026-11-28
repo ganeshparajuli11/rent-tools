@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ORGANISATION_SWITCHED_ACTION } from "@/lib/active-organisation";
 import { todayInLondon } from "@/lib/dates";
 import {
   buildDashboard,
@@ -63,7 +64,9 @@ export async function getDashboard(
     .from("memberships")
     .select("organisation_id, organisations(name)")
     .eq("user_id", ctx.userId)
+    .eq("status", "active")
     .order("created_at", { ascending: true })
+    .order("organisation_id", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (membershipError) throw membershipError;
@@ -108,6 +111,8 @@ async function loadActivity(
     .from("audit_log")
     .select("id, action, record_id, changes, created_at")
     .eq("organisation_id", organisationId)
+    // Switching organisation changes nothing, so it is not activity.
+    .neq("action", ORGANISATION_SWITCHED_ACTION)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(ACTIVITY_READ);

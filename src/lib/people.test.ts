@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { accountTypeLabel, initialsOf, roleLabel } from "./people";
+import {
+  accountTypeLabel,
+  firstNameOf,
+  initialsOf,
+  roleInSentence,
+  roleLabel,
+} from "./people";
 
 describe("initialsOf", () => {
   it("takes the first and last word's first letters", () => {
@@ -39,9 +45,33 @@ describe("accountTypeLabel", () => {
     expect(accountTypeLabel("property_manager")).toBe("Property manager");
   });
 
-  it("is Property manager until account types are stored (D-5)", () => {
+  it("is Property manager when missing or unknown (D-5)", () => {
     expect(accountTypeLabel(undefined)).toBe("Property manager");
     expect(accountTypeLabel(null)).toBe("Property manager");
     expect(accountTypeLabel("unknown")).toBe("Property manager");
+  });
+});
+
+describe("firstNameOf", () => {
+  it("takes the first word of a full name", () => {
+    expect(firstNameOf("Taylor Example")).toBe("Taylor");
+    expect(firstNameOf("  Sam   Sample  ")).toBe("Sam");
+    expect(firstNameOf("Alex")).toBe("Alex");
+  });
+
+  it("is null when there is no name", () => {
+    expect(firstNameOf(null)).toBe(null);
+    expect(firstNameOf(undefined)).toBe(null);
+    expect(firstNameOf("   ")).toBe(null);
+  });
+});
+
+describe("roleInSentence", () => {
+  it("reads well after 'is now'", () => {
+    expect(roleInSentence("owner")).toBe("the owner");
+    expect(roleInSentence("admin")).toBe("an admin");
+    expect(roleInSentence("manager")).toBe("a manager");
+    expect(roleInSentence("staff")).toBe("staff");
+    expect(roleInSentence("superadmin")).toBe("a member");
   });
 });

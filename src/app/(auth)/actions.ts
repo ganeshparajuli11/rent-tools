@@ -13,6 +13,7 @@ import {
   signUpSchema,
   verifyCodeSchema,
 } from "@/lib/validation/auth";
+import { clearPreferredOrganisationId } from "@/server/active-organisation";
 import {
   clearPendingSignInEmail,
   getPendingSignInEmail,
@@ -389,6 +390,8 @@ export async function signOut() {
     const supabase = await createClient();
     const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) logAuthError("signOut", error);
+    // The next person on this device starts in their own first organisation.
+    await clearPreferredOrganisationId();
   } catch (error) {
     logAuthError("signOut", error);
   }

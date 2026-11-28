@@ -14,12 +14,13 @@ import {
 } from "@/components/tenants/tenant-move-out-buttons";
 import { formatDate, formatDateUK, ordinal } from "@/lib/dates";
 import { formatPence } from "@/lib/money";
+import { hasRole } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { hasRemovedDetails } from "@/lib/validation/data-rights";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
-import { isOrganisationOwner } from "@/server/context";
+import { getMembership } from "@/server/context";
 import { getTenant } from "@/server/tenants";
 
 export const metadata: Metadata = { title: "Tenant" };
@@ -52,16 +53,22 @@ export default async function TenantPage({
 
   const supabase = await createClient();
   const ctx = { supabase, userId: user.id };
-  const tenant = await getTenant(ctx, id);
+  const [tenant, membership] = await Promise.all([
+    getTenant(ctx, id),
+    getMembership(ctx),
+  ]);
   if (!tenant) notFound();
 
   const movedOut = tenant.endDate !== null;
   const detailsRemoved = hasRemovedDetails(tenant);
+  // Staff can look but not change (docs/DESIGN_SYSTEM.md §8).
+  const canManage = hasRole(membership.role, "manager");
   // Only owners can remove details; only asked once the tenant has moved out.
   const canRemoveDetails =
     movedOut &&
     !detailsRemoved &&
-    (await isOrganisationOwner(ctx, tenant.organisationId));
+    membership.organisationId === tenant.organisationId &&
+    hasRole(membership.role, "owner");
   const place = tenant.room
     ? `${tenant.room.name}, ${tenant.home.name}`
     : tenant.home.name;
@@ -87,7 +94,7 @@ export default async function TenantPage({
         }
         subtitle={place}
         actions={
-          detailsRemoved ? null : (
+          detailsRemoved || !canManage ? null : (
             <Link
               href={`/tenants/${tenant.id}/edit`}
               className={cn(secondaryActionClass, "w-full sm:w-auto")}
@@ -112,9 +119,9 @@ export default async function TenantPage({
               Their personal details have been removed. Their rent and payments
               are kept.
             </p>
-          ) : (
+          ) : canManage ? (
             <UndoMoveOutButton tenantId={tenant.id} />
-          )}
+          ) : null}
         </div>
       ) : null}
 
@@ -135,7 +142,7 @@ export default async function TenantPage({
             </dl>
           </SectionCard>
 
-          {!movedOut ? (
+          {!movedOut && canManage ? (
             <section className="flex flex-col gap-2 rounded-[20px] border border-dashed border-border p-4 sm:p-6">
               <MoveOutButton tenantId={tenant.id} tenantName={tenant.name} />
             </section>

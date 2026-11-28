@@ -14,6 +14,7 @@ import {
   type Ctx,
   getOrganisationId,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -116,7 +117,7 @@ export async function preparePhotoUpload(
   homeId: string,
   contentType: PhotoContentType,
 ): Promise<{ path: string }> {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
   await findHome(ctx, organisationId, homeId);
   if ((await countPhotos(ctx, organisationId, homeId)) >= MAX_PHOTOS_PER_HOME) {
     throw new UserFacingError(TOO_MANY_PHOTOS);
@@ -132,7 +133,7 @@ export async function addPhoto(
   homeId: string,
   path: string,
 ): Promise<{ id: string }> {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
   const parts = parsePhotoPath(path);
   // The path must be in this organisation's folder for this home.
   if (
@@ -181,7 +182,7 @@ export async function removePhoto(
   ctx: Ctx,
   photoId: string,
 ): Promise<{ propertyId: string }> {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data, error } = await ctx.supabase
     .from("property_photos")

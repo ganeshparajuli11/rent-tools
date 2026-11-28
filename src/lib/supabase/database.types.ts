@@ -55,12 +55,66 @@ export type Database = {
           },
         ];
       };
+      invitations: {
+        Row: {
+          accepted_at: string | null;
+          accepted_by: string | null;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          id: string;
+          invited_by: string | null;
+          organisation_id: string;
+          revoked_at: string | null;
+          role: string;
+          token_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          email: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          organisation_id: string;
+          revoked_at?: string | null;
+          role: string;
+          token_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          organisation_id?: string;
+          revoked_at?: string | null;
+          role?: string;
+          token_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invitations_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       memberships: {
         Row: {
           created_at: string;
           id: string;
           organisation_id: string;
           role: string;
+          status: string;
           updated_at: string;
           user_id: string;
         };
@@ -69,6 +123,7 @@ export type Database = {
           id?: string;
           organisation_id: string;
           role?: string;
+          status?: string;
           updated_at?: string;
           user_id: string;
         };
@@ -77,6 +132,7 @@ export type Database = {
           id?: string;
           organisation_id?: string;
           role?: string;
+          status?: string;
           updated_at?: string;
           user_id?: string;
         };
@@ -92,6 +148,8 @@ export type Database = {
       };
       organisations: {
         Row: {
+          account_type: string;
+          contact_email: string | null;
           created_at: string;
           id: string;
           name: string;
@@ -99,6 +157,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          account_type?: string;
+          contact_email?: string | null;
           created_at?: string;
           id?: string;
           name: string;
@@ -106,6 +166,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          account_type?: string;
+          contact_email?: string | null;
           created_at?: string;
           id?: string;
           name?: string;
@@ -122,6 +184,7 @@ export type Database = {
           id: string;
           organisation_id: string;
           owner_email: string | null;
+          owner_id: string | null;
           owner_name: string;
           owner_phone: string | null;
           property_id: string;
@@ -136,6 +199,7 @@ export type Database = {
           id?: string;
           organisation_id: string;
           owner_email?: string | null;
+          owner_id?: string | null;
           owner_name: string;
           owner_phone?: string | null;
           property_id: string;
@@ -150,6 +214,7 @@ export type Database = {
           id?: string;
           organisation_id?: string;
           owner_email?: string | null;
+          owner_id?: string | null;
           owner_name?: string;
           owner_phone?: string | null;
           property_id?: string;
@@ -164,6 +229,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organisations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "owner_leases_owner_id_organisation_id_fkey";
+            columns: ["owner_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "property_owners";
+            referencedColumns: ["id", "organisation_id"];
           },
           {
             foreignKeyName: "owner_leases_property_id_organisation_id_fkey";
@@ -231,6 +303,27 @@ export type Database = {
           },
         ];
       };
+      profiles: {
+        Row: {
+          created_at: string;
+          full_name: string | null;
+          id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          full_name?: string | null;
+          id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          full_name?: string | null;
+          id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       properties: {
         Row: {
           address_line1: string | null;
@@ -277,6 +370,120 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "properties_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      property_owner_links: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          organisation_id: string;
+          owner_id: string;
+          property_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id: string;
+          owner_id: string;
+          property_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organisation_id?: string;
+          owner_id?: string;
+          property_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_owner_links_organisation_id_fkey";
+            columns: ["organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "organisations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "property_owner_links_owner_id_organisation_id_fkey";
+            columns: ["owner_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "property_owners";
+            referencedColumns: ["id", "organisation_id"];
+          },
+          {
+            foreignKeyName: "property_owner_links_property_id_organisation_id_fkey";
+            columns: ["property_id", "organisation_id"];
+            isOneToOne: false;
+            referencedRelation: "properties";
+            referencedColumns: ["id", "organisation_id"];
+          },
+        ];
+      };
+      property_owners: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          archived_at: string | null;
+          city: string | null;
+          company_name: string | null;
+          created_at: string;
+          display_name: string | null;
+          email: string | null;
+          full_name: string | null;
+          id: string;
+          notes: string | null;
+          organisation_id: string;
+          owner_type: string;
+          phone: string | null;
+          postcode: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          archived_at?: string | null;
+          city?: string | null;
+          company_name?: string | null;
+          created_at?: string;
+          display_name?: never;
+          email?: string | null;
+          full_name?: string | null;
+          id?: string;
+          notes?: string | null;
+          organisation_id: string;
+          owner_type?: string;
+          phone?: string | null;
+          postcode?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          archived_at?: string | null;
+          city?: string | null;
+          company_name?: string | null;
+          created_at?: string;
+          display_name?: never;
+          email?: string | null;
+          full_name?: string | null;
+          id?: string;
+          notes?: string | null;
+          organisation_id?: string;
+          owner_type?: string;
+          phone?: string | null;
+          postcode?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_owners_organisation_id_fkey";
             columns: ["organisation_id"];
             isOneToOne: false;
             referencedRelation: "organisations";
@@ -500,7 +707,45 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      accept_invitation: {
+        Args: { full_name?: string; invitation_id: string };
+        Returns: string;
+      };
+      create_organisation: {
+        Args: {
+          creator_full_name: string;
+          org_account_type: string;
+          org_contact_email: string;
+          org_name: string;
+        };
+        Returns: string;
+      };
+      invitation_for_token: {
+        Args: { invite_token: string };
+        Returns: {
+          expires_at: string;
+          id: string;
+          organisation_name: string;
+          role: string;
+          state: string;
+        }[];
+      };
+      my_invitations: {
+        Args: never;
+        Returns: {
+          expires_at: string;
+          id: string;
+          organisation_name: string;
+          role: string;
+        }[];
+      };
+      transfer_ownership: {
+        Args: {
+          confirm_organisation_name: string;
+          new_owner_membership_id: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

@@ -1,7 +1,11 @@
 "use client";
 
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { toast } from "sonner";
 
+import { switchOrganisationAction } from "@/app/(app)/organisation-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,9 +45,10 @@ const boxClass =
 
 /**
  * The active organisation: name and account type. With more than one
- * organisation it opens a menu listing them; picking another one arrives
- * with the switcher in roadmap item B5, so for now the others are shown
- * but cannot be chosen.
+ * organisation it opens a menu listing them, and picking another one
+ * switches to it (roadmap B5): the server checks the person is a member,
+ * remembers the choice, and we go to Today, because the page open now
+ * belongs to the old organisation.
  */
 export function OrganisationBlock({
   organisations,
@@ -54,10 +59,28 @@ export function OrganisationBlock({
   activeId: string;
   className?: string;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const active =
     organisations.find((organisation) => organisation.id === activeId) ??
     organisations[0];
   if (!active) return null;
+
+  function switchTo(organisation: Organisation) {
+    startTransition(async () => {
+      const result = await switchOrganisationAction({
+        organisationId: organisation.id,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        router.refresh();
+        return;
+      }
+      toast.success(`Now working in ${organisation.name}`);
+      router.push("/dashboard");
+      router.refresh();
+    });
+  }
 
   if (organisations.length < 2) {
     return (
@@ -71,7 +94,9 @@ export function OrganisationBlock({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(boxClass, "hover:bg-subtle", className)}
-        aria-label={`Organisation: ${active.name}. Show your organisations`}
+        aria-label={`Organisation: ${active.name}. Switch organisation`}
+        aria-busy={pending || undefined}
+        disabled={pending}
       >
         <Summary organisation={active} />
         <ChevronsUpDownIcon
@@ -87,19 +112,23 @@ export function OrganisationBlock({
             return (
               <DropdownMenuItem
                 key={organisation.id}
-                disabled={!current}
+                disabled={pending}
+                aria-current={current ? "true" : undefined}
+                onClick={current ? undefined : () => switchTo(organisation)}
                 className="min-h-11 gap-2 px-2 text-sm"
               >
-                <span className="flex-1 truncate">{organisation.name}</span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">{organisation.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {organisation.accountType}
+                  </span>
+                </span>
                 {current ? (
                   <CheckIcon aria-label="Current organisation" />
                 ) : null}
               </DropdownMenuItem>
             );
           })}
-          <DropdownMenuLabel className="px-2 pt-2 text-xs">
-            Switching between organisations is coming soon.
-          </DropdownMenuLabel>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

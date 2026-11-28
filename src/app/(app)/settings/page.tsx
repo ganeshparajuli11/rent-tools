@@ -1,14 +1,22 @@
+import { ChevronRightIcon, UsersIcon } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DataDownloads } from "@/components/settings/data-downloads";
+import { OrganisationDetails } from "@/components/settings/organisation-details";
 import { OverdueEmailSwitch } from "@/components/settings/overdue-email-switch";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
+import { getOrganisationDetails } from "@/server/organisation";
 import { getOverdueEmailSettings, NOT_READY } from "@/server/settings";
 
 export const metadata: Metadata = { title: "Settings" };
 
-/** Settings for the account: the daily late rent email and data downloads. */
+/**
+ * Settings for the account: the organisation's details, a link to
+ * Members, the daily late rent email and data downloads.
+ */
 export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
@@ -18,10 +26,15 @@ export default async function SettingsPage({
   const exportProblem =
     typeof params.export === "string" ? params.export : undefined;
   const supabase = await createClient();
-  const settings = await getOverdueEmailSettings({
-    supabase,
-    userId: user.id,
-  });
+  const ctx = { supabase, userId: user.id };
+  const [settings, organisation, canSeeMembers, canManageMembers] =
+    await Promise.all([
+      getOverdueEmailSettings(ctx),
+      getOrganisationDetails(ctx),
+      // Staff do not see Members (docs/DESIGN_SYSTEM.md §8).
+      hasRoleAtLeast(ctx, "manager"),
+      hasRoleAtLeast(ctx, "admin"),
+    ]);
 
   const disabledReason =
     settings.enabled === null
@@ -38,6 +51,30 @@ export default async function SettingsPage({
           {settings.organisationName}
         </p>
       </div>
+
+      <OrganisationDetails
+        name={organisation.name}
+        accountType={organisation.accountType}
+        contactEmail={organisation.contactEmail}
+      />
+
+      {canSeeMembers ? (
+        <Link
+          href="/settings/members"
+          className="flex min-h-16 items-center gap-4 rounded-xl border p-4 hover:bg-subtle sm:p-6"
+        >
+          <UsersIcon aria-hidden="true" className="size-5.5 shrink-0" />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-lg font-semibold">Members</span>
+            <span className="text-base text-muted-foreground">
+              {canManageMembers
+                ? "Invite people, change roles and remove members."
+                : "See who works in your organisation."}
+            </span>
+          </span>
+          <ChevronRightIcon aria-hidden="true" className="size-5 shrink-0" />
+        </Link>
+      ) : null}
 
       <OverdueEmailSwitch
         enabled={settings.enabled ?? false}

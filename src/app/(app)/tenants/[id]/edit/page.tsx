@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { RoleNotice } from "@/components/app/role-notice";
 import { TenantEditForm } from "@/components/tenants/tenant-edit-form";
 import { penceToPoundsInput } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { idSchema } from "@/lib/validation/homes";
 import { requireUser } from "@/server/auth";
+import { hasRoleAtLeast } from "@/server/context";
 import { getTenant } from "@/server/tenants";
 
 export const metadata: Metadata = { title: "Edit tenant" };
@@ -20,7 +22,11 @@ export default async function EditTenantPage({
   if (!idSchema.safeParse(id).success) notFound();
 
   const supabase = await createClient();
-  const tenant = await getTenant({ supabase, userId: user.id }, id);
+  const ctx = { supabase, userId: user.id };
+  const [tenant, canEdit] = await Promise.all([
+    getTenant(ctx, id),
+    hasRoleAtLeast(ctx, "manager"),
+  ]);
   if (!tenant) notFound();
 
   return (
@@ -33,21 +39,31 @@ export default async function EditTenantPage({
         Back to {tenant.name}
       </Link>
       <h1 className="text-2xl font-semibold">Edit tenant</h1>
-      <TenantEditForm
-        tenantId={tenant.id}
-        defaultValues={{
-          name: tenant.name,
-          phone: tenant.phone ?? "",
-          email: tenant.email ?? "",
-          rent: penceToPoundsInput(tenant.rentPence),
-          dueDay: String(tenant.dueDay),
-          startDate: tenant.startDate,
-          deposit:
-            tenant.depositPence > 0
-              ? penceToPoundsInput(tenant.depositPence)
-              : "",
-        }}
-      />
+      {!canEdit ? (
+        <RoleNotice
+          min="manager"
+          back={{
+            href: `/tenants/${tenant.id}`,
+            label: `Back to ${tenant.name}`,
+          }}
+        />
+      ) : (
+        <TenantEditForm
+          tenantId={tenant.id}
+          defaultValues={{
+            name: tenant.name,
+            phone: tenant.phone ?? "",
+            email: tenant.email ?? "",
+            rent: penceToPoundsInput(tenant.rentPence),
+            dueDay: String(tenant.dueDay),
+            startDate: tenant.startDate,
+            deposit:
+              tenant.depositPence > 0
+                ? penceToPoundsInput(tenant.depositPence)
+                : "",
+          }}
+        />
+      )}
     </div>
   );
 }

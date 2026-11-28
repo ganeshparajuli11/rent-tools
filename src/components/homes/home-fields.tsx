@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { UseFormReturn } from "react-hook-form";
 
 import { ChoiceField, DueDayField, TextField } from "@/components/form-fields";
@@ -91,7 +92,16 @@ export function LetTypeFields({
   );
 }
 
-export function OwnerFields({ form }: FormProp) {
+export function OwnerFields({
+  form,
+  linkedOwner,
+}: FormProp & {
+  /**
+   * "Edit home" when the rent is already paid to an owner record: their
+   * name and phone are changed on their own page, not here.
+   */
+  linkedOwner?: { id: string; name: string } | null;
+}) {
   const hasOwner = form.watch("hasOwner");
   return (
     <div className="flex flex-col gap-5">
@@ -107,20 +117,42 @@ export function OwnerFields({ form }: FormProp) {
       />
       {hasOwner === "yes" ? (
         <>
-          <TextField
-            form={form}
-            name="ownerName"
-            label="Owner's name"
-            autoComplete="off"
-          />
-          <TextField
-            form={form}
-            name="ownerPhone"
-            label="Owner's phone (optional)"
-            type="tel"
-            inputMode="tel"
-            autoComplete="off"
-          />
+          {linkedOwner ? (
+            <div className="flex flex-col gap-1 rounded-xl bg-subtle p-4 text-base">
+              <p className="text-[13px] text-muted-foreground">
+                Rent is paid to
+              </p>
+              <p className="font-semibold break-words">{linkedOwner.name}</p>
+              <p className="text-muted-foreground">
+                To change their name or phone,{" "}
+                <Link
+                  href={`/owners/${linkedOwner.id}/edit`}
+                  className="text-ink underline underline-offset-4"
+                >
+                  edit the owner
+                </Link>
+                .
+              </p>
+            </div>
+          ) : (
+            <>
+              <TextField
+                form={form}
+                name="ownerName"
+                label="Owner's name"
+                hint="We will add them to your owners and link them to this home."
+                autoComplete="off"
+              />
+              <TextField
+                form={form}
+                name="ownerPhone"
+                label="Owner's phone (optional)"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+              />
+            </>
+          )}
           <TextField
             form={form}
             name="ownerRent"

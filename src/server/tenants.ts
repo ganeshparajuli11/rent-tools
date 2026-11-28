@@ -10,8 +10,8 @@ import type { TenantPlace, TenantValues } from "@/lib/validation/tenants";
 import {
   type Ctx,
   getOrganisationId,
-  isOrganisationOwner,
   NOT_FOUND,
+  requireRole,
   UserFacingError,
   writeAudit,
 } from "./context";
@@ -157,7 +157,7 @@ export async function createTenant(
   place: TenantPlace,
   values: TenantValues,
 ) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   // One query: the home, its rooms and its current tenants.
   const { data: home, error } = await ctx.supabase
@@ -253,7 +253,7 @@ export async function createTenant(
 }
 
 export async function updateTenant(ctx: Ctx, id: string, values: TenantValues) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: before, error: readError } = await ctx.supabase
     .from("tenancies")
@@ -334,7 +334,7 @@ export async function updateTenant(ctx: Ctx, id: string, values: TenantValues) {
 
 /** "Tenant moved out": sets end_date, which frees the room. */
 export async function moveTenantOut(ctx: Ctx, id: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: before, error: readError } = await ctx.supabase
     .from("tenancies")
@@ -375,7 +375,7 @@ export async function moveTenantOut(ctx: Ctx, id: string) {
 
 /** Undo for "Tenant moved out": clears end_date if the place is still free. */
 export async function undoMoveTenantOut(ctx: Ctx, id: string) {
-  const organisationId = await getOrganisationId(ctx);
+  const { organisationId } = await requireRole(ctx, "manager");
 
   const { data: before, error: readError } = await ctx.supabase
     .from("tenancies")
@@ -467,12 +467,7 @@ export async function removeTenantDetails(
   ctx: Ctx,
   id: string,
 ): Promise<{ homeId: string; alreadyRemoved: boolean }> {
-  const organisationId = await getOrganisationId(ctx);
-  if (!(await isOrganisationOwner(ctx, organisationId))) {
-    throw new UserFacingError(
-      "Only the account owner can remove a tenant's details.",
-    );
-  }
+  const { organisationId } = await requireRole(ctx, "owner");
 
   const { data: before, error: readError } = await ctx.supabase
     .from("tenancies")
